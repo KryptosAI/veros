@@ -1,6 +1,7 @@
 const store = require('./store');
 const { seedDatabase, resolveMedicationClass, getUserById } = require('./data');
-const { processQuery, parseQuery, validatePermissions, generateCitation, scoreCitationConfidence } = require('./engine');
+const { processQuery, INTENTS } = require('./engine');
+const { generateCitation, scoreCitationConfidence } = require('./intents');
 const { logQuery, verifyChain } = require('./audit');
 const { deidentifyResource } = require('./deidentify');
 
