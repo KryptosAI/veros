@@ -134,7 +134,8 @@ app.post('/api/query', authMiddleware, async (req, res) => {
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
   const patientName = getPatientName(patientId);
-  const result = await processQuery(question, patientId, userId, patientName, req.ip);
+  const includeTrials = req.body.includeTrials === true;
+  const result = await processQuery(question, patientId, userId, patientName, req.ip, includeTrials);
 
   if (result.audit) logQuery(result.audit);
 
@@ -150,6 +151,7 @@ app.post('/api/query', authMiddleware, async (req, res) => {
     answer: result.answer,
     citations: result.citations,
     research: result.research || [],
+    trials: result.trials || [],
     hasMatch: result.hasMatch,
     confidence: result.confidence,
     policy: result.policy,
@@ -161,7 +163,7 @@ app.post('/api/query', authMiddleware, async (req, res) => {
 
 // Demo mode query
 app.post('/api/query/demo', async (req, res) => {
-  const { question, patientId, userId } = req.body;
+  const { question, patientId, userId, includeTrials } = req.body;
   if (!question || !patientId || !userId) return res.status(400).json({ error: 'question, patientId, and userId are required' });
   if (typeof question !== 'string' || question.length > 2000) return res.status(400).json({ error: 'question must be a string under 2000 characters' });
 
@@ -169,7 +171,7 @@ app.post('/api/query/demo', async (req, res) => {
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
   const patientName = getPatientName(patientId);
-  const result = await processQuery(question, patientId, userId, patientName, req.ip);
+  const result = await processQuery(question, patientId, userId, patientName, req.ip, includeTrials === true);
 
   if (result.audit) logQuery(result.audit);
 
@@ -184,6 +186,7 @@ app.post('/api/query/demo', async (req, res) => {
     answer: result.answer,
     citations: result.citations,
     research: result.research || [],
+    trials: result.trials || [],
     hasMatch: result.hasMatch,
     confidence: result.confidence, policy: result.policy,
     permissions: { role: result.permissions.role, roleLabel: result.permissions.roleLabel, scopes: result.permissions.scopes },
