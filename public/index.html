@@ -344,7 +344,7 @@ async function submitQuery() {
           <div class="display">${p.title}</div>
           <div style="font-size:11px;color:var(--muted)">${p.authors} — ${p.journal}, ${p.year}</div>
           ${p.snippet?`<div class="snippet" style="margin-top:4px">"${p.snippet.substring(0,200)}..."</div>`:''}
-          ${p.url?`<a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent)">View on Semantic Scholar →</a>`:''}
+          ${p.url?`<a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent)">View on PubMed →</a>`:''}
         </div>`).join('');
       document.getElementById('queryResult').appendChild(rDiv);
     }
