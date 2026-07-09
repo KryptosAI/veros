@@ -23,12 +23,13 @@ function validatePermissions(userId, patientId, resourceTypes) {
 // Regex patterns — used only as fallback when LLM is unavailable
 const REGEX_PATTERNS = [
   { pattern: /(?:any\s+)?history\s+(?:of\s+)?(?:an?\s+)?(?:adverse\s+)?reaction\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
-  { pattern: /(?:is\s+(?:the\s+)?(?:patient|pt)\s+)?allergic\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
-  { pattern: /allergy\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
-  { pattern: /intolerance\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
+  { pattern: /(?:is\s+(?:the\s+)?(?:patient|pt|he|she|they)\s+)?allerg(?:ic|y|ys|ies)\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
+  { pattern: /allerg(?:y|ic|ys|ies)\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
+  { pattern: /(?:has|got|have)\s+(?:an?\s+)?allerg(?:y|ic|ys|ies)\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
+  { pattern: /intoleran(?:ce|t)\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
   { pattern: /(?:any\s+)?problems?\s+with\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
   { pattern: /hypersensitivity\s+to\s+(\w[\w\s-]*\w)/i, intent: 'allergy_check', extract: m => ({ medication: m[1].trim() }) },
-  { pattern: /(?:what|any)\s+allerg(?:y|ies)/i, intent: 'allergy_list' },
+  { pattern: /(?:what|any|list|show)\s+allerg(?:y|ies|ys)/i, intent: 'allergy_list' },
   { pattern: /allergic\s+to\s+anything/i, intent: 'allergy_list' },
   { pattern: /(?:list|show)\s+(?:all\s+)?(?:medications|meds|drugs)/i, intent: 'medication_list' },
   { pattern: /(?:what|current|active)\s+(?:medications|meds|drugs)/i, intent: 'medication_list' },
