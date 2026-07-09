@@ -6,14 +6,17 @@ const { generateCitation, scoreCitationConfidence } = require('./engine');
 function isPropositionValid(text) {
   const t = (text || '').trim();
   if (!t || t.length < 5) return { valid: false, reason: 'too_short' };
-  if (/^(?:please|kindly|can you|could you|would you|will you|make sure|ensure|remember|don't forget|do not)/i.test(t))
+  // Imperative — starts with command words
+  if (/^(?:please|kindly|make sure|ensure that|remember to|don't forget to|do not forget to)\b/i.test(t))
     return { valid: false, reason: 'imperative' };
-  if (/\?$/.test(t) || /^(?:what|where|when|why|how|is there|are there|does|do|can|could|would|should|has|have)/i.test(t))
+  // Interrogative — ends with ? OR starts with question words
+  if (/\?$/.test(t))
     return { valid: false, reason: 'interrogative' };
-  if (/\b(?:might|may|could|possibly|potentially|likely|probably|perhaps|maybe|i think|in my opinion)\b/i.test(t) && !/\b(?:allerg|reaction|intoler|prescribed|diagnosed|confirmed)\b/i.test(t))
-    return { valid: false, reason: 'speculative' };
-  if (!/\b(?:allerg|reaction|intoler|medication|prescribed|taking|diagnosed|condition|lab|test|result|blood|pressure|glucose|a1c|vision|eye|heart|kidney|liver|diabetes|hypertension|glaucoma|cataract|macular|retinopathy)\b/i.test(t))
-    return { valid: false, reason: 'no_clinical_terms' };
+  if (/^(?:what|where|when|why|how|who)\b/i.test(t) && /\?/.test(t))
+    return { valid: false, reason: 'interrogative' };
+  // Truly empty/vague — no substance at all
+  if (/^(?:this|that|it|the|a|an|he|she|they|patient|is|was|are|were|has|have|had)\s*$/i.test(t))
+    return { valid: false, reason: 'too_short' };
   return { valid: true };
 }
 
@@ -33,9 +36,20 @@ async function decomposeClaim(claimText) {
   const isSimple = simplePatterns.some(p => p.test(claimText));
   if (isSimple) return [claimText];
 
+  // Try regex-based splitting on "and" / "but" / "while" for compound claims
+  const conjunctions = claimText.split(/\s+(?:and|but|while|,?\s*(?:also|additionally))\s+/i).map(s => s.trim()).filter(s => s.length > 5);
+  if (conjunctions.length > 1) {
+    // Check if each part looks like a standalone claim
+    const allLookValid = conjunctions.every(c =>
+      /\b(?:allerg|reaction|has|taking|prescribed|on|diagnosed|condition)\b/i.test(c) || c.length > 15
+    );
+    if (allLookValid) return conjunctions;
+  }
+
+  // Try LLM decomposition
   try {
     const { callLLMRaw } = require('./llm-adapter');
-    const prompt = `Break this clinical claim into separate, verifiable statements. Each statement should be a single fact that can be independently checked against a medical record. Remove "and" conjunctions. Remove vague qualifiers like "might", "could", "possibly".
+    const prompt = `Break this clinical claim into separate, verifiable statements. Each statement should be a single fact that can be independently checked against a medical record. Split on conjunctions like "and", "but", "while". Remove qualifiers like "might", "could". 
 
 Claim: "${claimText}"
 
@@ -46,7 +60,7 @@ Return ONLY valid JSON: {"propositions": ["statement 1", "statement 2"]}`;
     if (json?.propositions?.length > 1) {
       return json.propositions.map(p => p.trim()).filter(p => p.length > 3);
     }
-  } catch { /* fall through to single proposition */ }
+  } catch { /* fall through */ }
 
   return [claimText];
 }

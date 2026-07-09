@@ -317,7 +317,6 @@ app.post('/api/verify/demo', async (req, res) => {
     responseTimeMs,
   });
 });
-});
 
 app.post('/api/verify/bulk', authMiddleware, async (req, res) => {
   const { claims, patientId } = req.body;
