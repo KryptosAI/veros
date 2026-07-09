@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veros — Clinical Ground Truth for AI</title>
+  <link rel="icon" type="image/svg+xml" href="/logo/veros-icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/logo/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/logo/apple-touch-icon.png">
+  <link rel="mask-icon" href="/logo/veros-icon.svg" color="#0B1D3A">
+  <meta name="theme-color" content="#0B1D3A">
+  <style>
+    :root { --bg: #0f172a; --panel: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --violet: #8b5cf6; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+    .app { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    header { padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 20px; font-weight: 600; }
+    header .badge { font-size: 11px; background: var(--violet); color: #fff; padding: 4px 8px; border-radius: 4px; margin-right: 4px; }
+    header .badge2 { font-size: 11px; background: var(--accent); color: #fff; padding: 4px 8px; border-radius: 4px; }
+    .grid { display: grid; grid-template-columns: 260px 1fr 300px; gap: 20px; }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 12px; }
+    .patient-list { list-style: none; }
+    .patient-list li { padding: 10px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; transition: background .15s; display: flex; justify-content: space-between; }
+    .patient-list li:hover { background: rgba(59,130,246,.1); }
+    .patient-list li.active { background: rgba(59,130,246,.2); border: 1px solid var(--accent); }
+    .patient-list li .name { font-weight: 500; }
+    .patient-list li .mrn { font-size: 11px; color: var(--muted); }
+    select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px; margin-top: 4px; }
+    textarea { width: 100%; padding: 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 14px; resize: vertical; height: 80px; font-family: inherit; }
+    textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+    input { width: 100%; padding: 8px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px; margin-bottom: 6px; }
+    .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 14px; transition: background .15s; margin-right: 4px; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-verify { background: var(--violet); color: #fff; }
+    .btn-verify:hover { background: #7c3aed; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 4px; background: var(--panel); color: var(--muted); border: 1px solid var(--border); cursor: pointer; margin: 2px; }
+    .btn-sm:hover { border-color: var(--accent); color: var(--text); }
+    .mode-bar { display: flex; gap: 0; margin-bottom: 16px; }
+    .mode-btn { flex: 1; padding: 10px 16px; font-size: 14px; font-weight: 500; background: var(--bg); color: var(--muted); border: 1px solid var(--border); cursor: pointer; text-align: center; }
+    .mode-btn:first-child { border-radius: 6px 0 0 6px; }
+    .mode-btn:last-child { border-radius: 0 6px 6px 0; }
+    .mode-btn.active { background: var(--panel); color: var(--text); border-color: var(--accent); border-width: 2px; }
+    .result-box { background: var(--bg); padding: 16px; border-radius: 6px; border: 1px solid var(--border); }
+    .verdict { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 13px; margin-bottom: 12px; }
+    .verdict-VERIFIED { background: rgba(34,197,94,.15); color: var(--success); border: 1px solid var(--success); }
+    .verdict-CONTRADICTED { background: rgba(239,68,68,.15); color: var(--danger); border: 1px solid var(--danger); }
+    .verdict-UNVERIFIABLE { background: rgba(245,158,11,.15); color: var(--warning); border: 1px solid var(--warning); }
+    .verdict-PARTIALLY_VERIFIED { background: rgba(139,92,246,.15); color: var(--violet); border: 1px solid var(--violet); }
+    .evidence-list { margin-top: 12px; }
+    .evidence-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start; }
+    .evidence-item .icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .evidence-item .body { flex: 1; }
+    .evidence-item .label { font-size: 11px; font-weight: 500; margin-bottom: 2px; }
+    .evidence-item .detail { font-size: 13px; color: var(--text); }
+    .evidence-item .source { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .evidence-item.supporting { border-left: 3px solid var(--success); }
+    .evidence-item.contradicting { border-left: 3px solid var(--danger); }
+    .evidence-item.unverifiable { border-left: 3px solid var(--warning); }
+    .citation { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+    .citation .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .citation .type { font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(59,130,246,.2); color: var(--accent); font-weight: 500; }
+    .citation .conf-high { color: var(--success); font-size: 10px; }
+    .citation .conf-mid { color: var(--warning); font-size: 10px; }
+    .citation .conf-low { color: var(--danger); font-size: 10px; }
+    .citation .display { font-weight: 500; margin-bottom: 2px; }
+    .citation .snippet { font-size: 12px; color: var(--muted); font-style: italic; }
+    .citation .author { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .stat:last-child { border-bottom: none; }
+    .stat .val { font-weight: 500; color: var(--accent); }
+    .allergy-tag { display: inline-block; padding: 2px 8px; margin: 2px; border-radius: 4px; font-size: 11px; }
+    .allergy-tag.high { background: rgba(239,68,68,.2); color: var(--danger); }
+    .allergy-tag.low { background: rgba(245,158,11,.2); color: var(--warning); }
+    .audit-section { max-height: 250px; overflow-y: auto; }
+    .audit-entry { font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+    .audit-entry .ts { color: var(--muted); }
+    .error-box { background: rgba(239,68,68,.1); border: 1px solid var(--danger); padding: 12px; border-radius: 6px; color: var(--danger); margin-top: 16px; font-size: 13px; }
+    .row { display: flex; gap: 8px; }
+    .row input { flex: 1; }
+    .label-sm { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+    .claim-type-select { margin-bottom: 8px; }
+    .claim-type-select select { width: auto; min-width: 140px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div><h1><img src="/logo/veros-icon.svg" alt="Veros" style="height:28px;width:28px;vertical-align:middle;margin-right:10px;margin-top:-2px">Veros <span class="badge">GROUND TRUTH</span><span class="badge2">v0.3</span></h1></div>
+    <div style="font-size:12px;color:var(--muted)">Verify AI claims against FHIR truth &middot; Query &middot; Cite &middot; Audit</div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Patients + User -->
+    <div>
+      <div class="card"><h3>Patients</h3><ul class="patient-list" id="patientList"></ul></div>
+      <div class="card"><h3>User (Role)</h3><select id="userSelect"></select></div>
+      <div class="card" id="patientDetail" style="font-size:12px;color:var(--muted)">Select a patient</div>
+    </div>
+
+    <!-- CENTER: Mode toggle + Input + Results -->
+    <div>
+      <div class="mode-bar">
+        <button class="mode-btn active" onclick="switchMode('query')">Ask Questions</button>
+        <button class="mode-btn" onclick="switchMode('verify')">Verify AI Claims</button>
+      </div>
+
+      <!-- QUERY MODE -->
+      <div id="queryMode">
+        <div class="card">
+          <h3>Ask the Chart</h3>
+          <textarea id="question" placeholder="Any history of adverse reaction to penicillin?"></textarea>
+          <div style="margin-top:8px">
+            <button class="btn btn-primary" onclick="submitQuery()">Submit Query</button>
+            <button class="btn btn-sm" onclick="document.getElementById('queryResult').style.display='none'" style="float:right">Clear</button>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Examples:
+              <button class="btn btn-sm" onclick="setQuestion('Any history of adverse reaction to penicillin?')">Penicillin?</button>
+              <button class="btn btn-sm" onclick="setQuestion('Is the patient allergic to sulfa?')">Sulfa?</button>
+              <button class="btn btn-sm" onclick="setQuestion('What medications is the patient on?')">Meds</button>
+              <button class="btn btn-sm" onclick="setQuestion('What allergies does the patient have?')">Allergies</button>
+              <button class="btn btn-sm" onclick="setQuestion('What labs are abnormal?')">Labs</button>
+            </div>
+          </div>
+        </div>
+        <div id="queryResult" style="display:none">
+          <div class="card"><div class="result-box">
+            <div style="font-size:10px;color:var(--accent);margin-bottom:8px" id="qPolicy"></div>
+            <div style="font-size:15px;font-weight:500" id="qAnswer"></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px" id="qMeta"></div>
+          </div></div>
+          <div class="card" id="qCitations" style="display:none">
+            <h3>Citations (FHIR Sources)</h3>
+            <div id="qCitationsList"></div>
+          </div>
+          <div class="error-box" id="qError" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- VERIFY MODE -->
+      <div id="verifyMode" style="display:none">
+        <div class="card">
+          <h3>Verify AI Claim Against FHIR Truth</h3>
+          <div class="claim-type-select">
+            <span class="label-sm">Claim type:</span>
+            <select id="claimType" onchange="updateClaimForm()">
+              <option value="allergy">Allergy</option>
+              <option value="condition">Condition</option>
+              <option value="medication">Medication</option>
+              <option value="lab">Lab Result</option>
+              <option value="relationship">Compound</option>
+            </select>
+            <span style="font-size:11px;color:var(--muted);margin-left:8px">or type NL claim below</span>
+          </div>
+
+          <div id="claimFields"></div>
+
+          <div style="margin-top:12px">
+            <div class="label-sm">Natural language claim:</div>
+            <textarea id="nlClaim" placeholder="Patient is allergic to penicillin" style="height:40px;margin-bottom:8px"></textarea>
+          </div>
+
+          <button class="btn btn-verify" onclick="submitVerify()">Verify Claim</button>
+          <button class="btn btn-sm" onclick="document.getElementById('verifyResult').style.display='none'" style="float:right">Clear</button>
+
+          <div style="margin-top:12px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Examples:
+              <button class="btn btn-sm" onclick="setVerifyNL('Patient is allergic to penicillin')">Penicillin allergy</button>
+              <button class="btn btn-sm" onclick="setVerifyNL('Patient is allergic to sulfa')">Sulfa allergy</button>
+              <button class="btn btn-sm" onclick="setVerifyNL('Patient is allergic to cephalexin')">Cephalexin?</button>
+              <button class="btn btn-sm" onclick="setVerifyStructured('allergy','medication','penicillin')">Structured allergy</button>
+              <button class="btn btn-sm" onclick="setVerifyStructured('condition','condition','Hypertension')">Hypertension</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="verifyResult" style="display:none">
+          <div class="card">
+            <div class="result-box">
+              <div id="vVerdict"></div>
+              <div id="vClaimDisplay" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+              <div id="vMeta" style="font-size:11px;color:var(--muted)"></div>
+            </div>
+          </div>
+          <div class="card" id="vEvidence" style="display:none">
+            <h3>Evidence</h3>
+            <div class="evidence-list" id="vEvidenceList"></div>
+          </div>
+          <div class="error-box" id="vError" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stats + Summary + Audit -->
+    <div>
+      <div class="card">
+        <h3>System</h3>
+        <div class="stat"><span>Patients</span><span class="val" id="statPatients">-</span></div>
+        <div class="stat"><span>Resources</span><span class="val" id="statResources">-</span></div>
+        <div class="stat"><span>Response</span><span class="val" id="statTime">-</span></div>
+        <div class="stat"><span>Audit Chain</span><span class="val" id="statChain">-</span></div>
+      </div>
+      <div class="card" id="patientSummarySection" style="display:none">
+        <h3>Chart Summary</h3>
+        <div id="patientConditions"></div>
+        <div id="patientAllergies" style="margin-top:8px"></div>
+        <div id="patientMeds" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+      </div>
+      <div class="card audit-section">
+        <h3>Recent Audit Log</h3>
+        <div id="auditLog" style="font-size:11px;color:var(--muted)">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let selectedPatient = null, selectedUser = null, currentMode = 'query';
+
+async function load() {
+  const [healthRes, usersRes] = await Promise.all([fetch(`${API}/api/health`), fetch(`${API}/api/users`)]);
+  const h = await healthRes.json();
+  const users = await usersRes.json();
+  document.getElementById('statPatients').textContent = h.patients;
+  document.getElementById('statResources').textContent = h.totalResources;
+
+  for (let i = 1; i <= 4; i++) {
+    const pr = await fetch(`${API}/fhir/Patient/patient-00${i}`);
+    if (!pr.ok) break;
+    const p = await pr.json();
+    const name = (p.name?.[0]?.given||[]).join(' ')+' '+p.name?.[0]?.family;
+    const mrn = p.identifier?.[0]?.value || p.id;
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="name">${name}</span><span class="mrn">${mrn}</span>`;
+    li.onclick = () => selectPatient(p.id, name, p.birthDate, mrn);
+    document.getElementById('patientList').appendChild(li);
+  }
+
+  const sel = document.getElementById('userSelect');
+  users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id; opt.textContent = `${u.name} (${u.roleLabel})`; sel.appendChild(opt);
+  });
+  sel.onchange = () => selectedUser = sel.value;
+  if (users.length > 0) { selectedUser = users[0].id; sel.value = users[0].id; }
+
+  updateClaimForm();
+  loadAudit();
+  setInterval(loadAudit, 8000);
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  if (mode === 'query') {
+    document.querySelector('.mode-btn:first-child').classList.add('active');
+    document.getElementById('queryMode').style.display = 'block';
+    document.getElementById('verifyMode').style.display = 'none';
+  } else {
+    document.querySelector('.mode-btn:last-child').classList.add('active');
+    document.getElementById('queryMode').style.display = 'none';
+    document.getElementById('verifyMode').style.display = 'block';
+  }
+}
+
+async function selectPatient(id, name, dob, mrn) {
+  selectedPatient = { id, name, dob, mrn };
+  document.querySelectorAll('.patient-list li').forEach(li => li.classList.remove('active'));
+  for (const li of document.querySelectorAll('.patient-list li')) { if (li.textContent.includes(name)) { li.classList.add('active'); break; } }
+  document.getElementById('patientDetail').innerHTML = `<strong>${name}</strong><br>DOB: ${dob||'N/A'}<br>MRN: ${mrn}`;
+
+  const sr = await fetch(`${API}/api/patients/${id}/summary`);
+  if (!sr.ok) return;
+  const s = await sr.json();
+  const sec = document.getElementById('patientSummarySection'); sec.style.display = 'block';
+  document.getElementById('patientConditions').innerHTML = `<div style="font-size:12px;font-weight:500;margin-bottom:4px">Conditions (${s.conditionCount})</div>${s.conditions?.map(c=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">${c.label} (${c.status})</div>`).join('')||'<span style="font-size:11px;color:var(--muted)">None</span>'}`;
+  document.getElementById('patientAllergies').innerHTML = `<div style="font-size:12px;font-weight:500;margin-bottom:4px">Allergies (${s.allergyCount})</div>${s.allergies?.map(a=>`<span class="allergy-tag ${a.criticality==='high'?'high':'low'}">${a.substance}${a.criticality==='high'?' ⚠':''}</span>`).join('')||'<span style="font-size:11px;color:var(--muted)">NKDA</span>'}`;
+  document.getElementById('patientMeds').innerHTML = `<strong>Medications:</strong> ${s.medicationCount} total, ${s.activeMedications} active`;
+  document.getElementById('queryResult').style.display = 'none';
+  document.getElementById('verifyResult').style.display = 'none';
+}
+
+// ── Query Mode ──
+function setQuestion(t) { document.getElementById('question').value = t; }
+
+async function submitQuery() {
+  const q = document.getElementById('question').value.trim();
+  if (!q || !selectedPatient || !selectedUser) { alert('Select patient, user, and enter a question'); return; }
+
+  const c = document.getElementById('queryResult'); c.style.display = 'block';
+  document.getElementById('qCitations').style.display = 'none';
+  document.getElementById('qError').style.display = 'none';
+  document.getElementById('qAnswer').textContent = 'Processing...';
+  document.getElementById('qPolicy').textContent = '';
+  document.getElementById('qMeta').textContent = '';
+
+  const start = performance.now();
+  try {
+    const r = await fetch(`${API}/api/query/demo`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({question: q, patientId: selectedPatient.id, userId: selectedUser})
+    });
+    document.getElementById('statTime').textContent = Math.round(performance.now()-start)+'ms';
+    const d = await r.json();
+    if (!r.ok || d.error) { document.getElementById('qError').style.display='block'; document.getElementById('qError').textContent=d.error||`Error ${r.status}`; return; }
+    document.getElementById('qAnswer').textContent = d.answer;
+    document.getElementById('qPolicy').textContent = d.policy==='all_cited'?'✓ ALL CLAIMS CITED':d.policy==='negative_findings'?'○ NEGATIVE FINDINGS':d.policy==='no_source_no_answer'?'⊘ NO SOURCE, NO ANSWER':'';
+    document.getElementById('qMeta').textContent = `Confidence: ${d.confidence} | Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms`;
+    if (d.citations?.length > 0) {
+      document.getElementById('qCitations').style.display = 'block';
+      document.getElementById('qCitationsList').innerHTML = d.citations.map(c=>`
+        <div class="citation">
+          <div class="header"><span class="type">${c.sourceType}</span><span><span class="${c.confidence>=0.8?'conf-high':c.confidence>=0.5?'conf-mid':'conf-low'}">${(c.confidence*100).toFixed(0)}%</span><span style="font-size:11px;color:var(--muted);margin-left:8px">${c.date||'N/A'}</span></span></div>
+          <div class="display">${c.display}</div>
+          ${c.snippet?`<div class="snippet">"${c.snippet}"</div>`:''}
+          <div class="author">By: ${c.author||'Unknown'} | FHIR: ${c.fhirReference}</div>
+        </div>`).join('');
+    }
+  } catch(e) { document.getElementById('qError').style.display='block'; document.getElementById('qError').textContent=e.message; }
+}
+
+// ── Verify Mode ──
+function updateClaimForm() {
+  const type = document.getElementById('claimType').value;
+  const fields = {
+    allergy: '<div class="row"><input id="fld1" placeholder="medication (e.g. penicillin)"></div>',
+    condition: '<div class="row"><input id="fld1" placeholder="condition (e.g. Type 2 Diabetes)"></div>',
+    medication: '<div class="row"><input id="fld1" placeholder="drug (e.g. Metformin)"></div>',
+    lab: '<div class="row"><input id="fld1" placeholder="test (e.g. HbA1c)" style="flex:2"><input id="fld2" placeholder="value (e.g. 7.1)" style="flex:1"><input id="fld3" placeholder="unit (e.g. %)" style="flex:1"></div>',
+    relationship: '<div style="font-size:11px;color:var(--muted)">Enter NL claim or multiple claims separated by semicolons (;)</div>',
+  };
+  document.getElementById('claimFields').innerHTML = fields[type] || '';
+}
+
+function setVerifyNL(claim) { document.getElementById('nlClaim').value = claim; document.getElementById('claimFields').innerHTML=''; }
+
+function setVerifyStructured(type, key, val) {
+  document.getElementById('claimType').value = type; updateClaimForm();
+  setTimeout(() => { const el = document.getElementById('fld1'); if (el) el.value = val; }, 50);
+  document.getElementById('nlClaim').value = '';
+}
+
+async function submitVerify() {
+  if (!selectedPatient || !selectedUser) { alert('Select patient and user first'); return; }
+  const nlClaim = document.getElementById('nlClaim').value.trim();
+  let claim;
+  if (nlClaim) {
+    claim = nlClaim;
+  } else {
+    const type = document.getElementById('claimType').value;
+    const f1 = document.getElementById('fld1');
+    const f2 = document.getElementById('fld2');
+    const f3 = document.getElementById('fld3');
+
+    if (type === 'allergy') claim = f1?.value ? { type, medication: f1.value } : null;
+    else if (type === 'condition') claim = f1?.value ? { type, condition: f1.value } : null;
+    else if (type === 'medication') claim = f1?.value ? { type, drug: f1.value } : null;
+    else if (type === 'lab') claim = f1?.value ? { type, test: f1.value, value: parseFloat(f2?.value) || undefined, unit: f3?.value || undefined } : null;
+    else if (type === 'relationship') claim = nlClaim ? { type, supporting: nlClaim.split(';').map(s=>s.trim()).filter(Boolean).map(s=>({type:'allergy',medication:s})) } : null;
+  }
+  if (!claim) { alert('Enter a natural language claim or fill in the structured fields'); return; }
+
+  const c = document.getElementById('verifyResult'); c.style.display = 'block';
+  document.getElementById('vEvidence').style.display = 'none';
+  document.getElementById('vError').style.display = 'none';
+  document.getElementById('vVerdict').innerHTML = '<span style="color:var(--muted)">Verifying...</span>';
+  document.getElementById('vClaimDisplay').textContent = typeof claim === 'string' ? `"${claim}"` : JSON.stringify(claim);
+  document.getElementById('vMeta').textContent = '';
+
+  const start = performance.now();
+  try {
+    const r = await fetch(`${API}/api/verify/demo`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({claim, patientId: selectedPatient.id, userId: selectedUser})
+    });
+    document.getElementById('statTime').textContent = Math.round(performance.now()-start)+'ms';
+    const d = await r.json();
+    if (!r.ok || !d.verdict) { document.getElementById('vError').style.display='block'; document.getElementById('vError').textContent=d.error||`Error ${r.status}`; return; }
+
+    document.getElementById('vVerdict').innerHTML = `<span class="verdict verdict-${d.verdict}">${d.verdict}</span>`;
+    document.getElementById('vMeta').textContent = `Confidence: ${Math.round(d.confidence*100)}% | Policy: ${d.policy} | ${d.responseTimeMs}ms`;
+
+    const evidence = d.evidence;
+    if (!evidence) return;
+    const all = [...(evidence.supporting||[]).map(e=>({...e,kind:'supporting'})), ...(evidence.contradicting||[]).map(e=>({...e,kind:'contradicting'})), ...(evidence.unverifiableParts||[]).map(e=>({...e,kind:'unverifiable'}))];
+    if (all.length === 0) return;
+    document.getElementById('vEvidence').style.display = 'block';
+
+    document.getElementById('vEvidenceList').innerHTML = all.map(e=>{
+      const icon = e.kind==='supporting'?'✓':e.kind==='contradicting'?'✗':'?';
+      return `<div class="evidence-item ${e.kind}">
+        <div class="icon">${icon}</div>
+        <div class="body">
+          <div class="label">${e.relationship||e.kind}</div>
+          <div class="detail">${e.detail||''}</div>
+          ${e.citation?`<div class="source">${e.citation.sourceType}/${e.citation.sourceId} — ${e.citation.display||''}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { document.getElementById('vError').style.display='block'; document.getElementById('vError').textContent=e.message; }
+}
+
+async function loadAudit() {
+  try {
+    const ar = await fetch(`${API}/api/audit?key=veros-demo`);
+    const logs = await ar.json();
+    document.getElementById('auditLog').innerHTML = logs.slice(0,12).map(l=>`
+      <div class="audit-entry"><span class="ts">${(l.timestamp||'').substring(11,19)}</span> ${l.user_name} → ${l.patient_name||l.patient_id}: ${(l.query_text||'').substring(0,40)} <span style="color:${l.success?'var(--success)':'var(--danger)'}">${l.success?'✓':'✗'}</span> (${l.response_time_ms}ms)</div>`).join('');
+    if (logs.length > 0) {
+      const vr = await fetch(`${API}/api/audit/verify?key=veros-demo`);
+      const v = await vr.json();
+      document.getElementById('statChain').textContent = v.valid ? `✓ ${v.entries}` : '✗ BROKEN';
+    }
+  } catch(e) {}
+}
+load();
+</script>
+</body>
+</html>

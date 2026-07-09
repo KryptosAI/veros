@@ -1,0 +1,9 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+audit.jsonl
+.env
+.env.local
+.env.*.local
+.DS_Store

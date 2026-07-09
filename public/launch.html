@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veros — SMART on FHIR Launch</title>
+  <link rel="icon" type="image/svg+xml" href="/logo/veros-icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/logo/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/logo/apple-touch-icon.png">
+  <style>
+    :root { --bg: #0f172a; --panel: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 40px; max-width: 480px; width: 100%; text-align: center; }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .status { padding: 16px; border-radius: 8px; margin-bottom: 24px; font-size: 14px; }
+    .status.loading { background: rgba(59,130,246,.1); border: 1px solid var(--accent); color: var(--accent); }
+    .status.success { background: rgba(34,197,94,.1); border: 1px solid var(--success); color: var(--success); }
+    .status.error { background: rgba(239,68,68,.1); border: 1px solid var(--danger); color: var(--danger); }
+    .params { text-align: left; font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+    .params pre { background: var(--bg); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin-top: 8px; }
+    .btn { padding: 12px 32px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 15px; transition: background .15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1><img src="/logo/veros-icon.svg" alt="Veros" style="height:32px;width:32px;vertical-align:middle;margin-right:10px">Veros</h1>
+  <p class="subtitle">SMART on FHIR App Launch</p>
+
+  <div id="status" class="status loading">Initializing SMART launch...</div>
+
+  <div class="params">
+    <strong>Launch Parameters</strong>
+    <pre id="params">Parsing...</pre>
+  </div>
+
+  <button class="btn btn-primary" id="launchBtn" disabled onclick="handleLaunch()">
+    Launch Veros
+  </button>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const launchParams = {
+  iss: params.get('iss'),
+  launch: params.get('launch'),
+  scope: params.get('scope'),
+  state: params.get('state'),
+  aud: params.get('aud'),
+};
+
+document.getElementById('params').textContent = JSON.stringify(launchParams, null, 2);
+
+if (!launchParams.iss) {
+  document.getElementById('status').innerHTML = '<strong>Standalone Launch</strong><br>No EHR launch context detected. Running in standalone mode.';
+  document.getElementById('status').className = 'status success';
+  document.getElementById('launchBtn').disabled = false;
+  document.getElementById('launchBtn').textContent = 'Continue to Veros';
+} else {
+  document.getElementById('status').innerHTML = `<strong>EHR Launch Detected</strong><br>Issuer: ${launchParams.iss}<br>Launch: ${launchParams.launch || 'none'}`;
+  document.getElementById('status').className = 'status success';
+  document.getElementById('launchBtn').disabled = false;
+
+  fetch(`${launchParams.iss}/.well-known/smart-configuration`)
+    .then(r => r.json())
+    .then(config => {
+      document.getElementById('status').innerHTML = `<strong>Connected to EHR</strong><br>Issuer: ${launchParams.iss}<br>Authorization: ${config.authorization_endpoint}`;
+    })
+    .catch(() => {
+      document.getElementById('status').innerHTML = `<strong>EHR Unreachable</strong><br>Cannot reach ${launchParams.iss}<br>Running in demo mode.`;
+      document.getElementById('status').className = 'status error';
+    });
+}
+
+function handleLaunch() {
+  if (launchParams.iss) {
+    const authUrl = `${launchParams.iss}/auth/authorize?` + new URLSearchParams({
+      response_type: 'code',
+      client_id: 'veros',
+      redirect_uri: window.location.origin + '/launch-callback.html',
+      scope: launchParams.scope || 'patient/AllergyIntolerance.rs patient/MedicationRequest.rs patient/Observation.rs openid fhirUser launch/patient',
+      state: launchParams.state || 'smart-launch',
+      aud: launchParams.aud || launchParams.iss,
+      launch: launchParams.launch || '',
+    }).toString();
+    window.location.href = authUrl;
+  } else {
+    window.location.href = '/';
+  }
+}
+</script>
+</body>
+</html>
