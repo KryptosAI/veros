@@ -132,10 +132,11 @@ const INTENTS = [
   },
   {
     name: 'demographic',
-    description: 'Get a specific patient demographic detail — age, date of birth, name, gender, or MRN. These are single-fact questions, not chart overviews.',
+    description: 'Get a specific patient demographic detail — age, date of birth, name, gender, MRN, vital status (alive/deceased), or other single-fact questions about who the patient is. Not for chart overviews.',
     resourceTypes: ['Patient'],
     search(patientId) {
-      return { type: 'demographic', patient: store.getResource('Patient', patientId) };
+      const patient = store.getResource('Patient', patientId);
+      return { type: 'demographic', patient, patientId };
     },
     answer(patientName, result, params, question) {
       const patient = result.patient;
@@ -143,6 +144,23 @@ const INTENTS = [
       if (!patient) return { answer: `Could not find ${patientName}'s record.`, citations, hasMatch: false, confidence: 0 };
 
       const lower = (question || '').toLowerCase();
+
+      // Vital status / mortality
+      if (/alive|dead|deceased|living|died|passed|mortality|still\s+with/i.test(lower)) {
+        if (patient.deceasedBoolean === true || patient.deceasedDateTime) {
+          const when = patient.deceasedDateTime || 'unknown date';
+          return { answer: `${patientName} is deceased (recorded ${when}).`, citations, hasMatch: true, confidence: 1.0 };
+        }
+        // Check for recent activity as evidence of being alive
+        const recentMeds = store.searchAllMedications(result.patientId).filter(m => m.status === 'active').length;
+        const recentObs = store.searchObservations(result.patientId).filter(o => {
+          try { return new Date(o.effectiveDateTime) > new Date(Date.now() - 365*24*60*60*1000); } catch { return false; }
+        }).length;
+        if (recentMeds > 0 || recentObs > 0) {
+          return { answer: `${patientName} is alive — chart shows ${recentMeds} active medication(s) and ${recentObs} recent observation(s) within the past year. No deceased record found.`, citations, hasMatch: true, confidence: 0.9 };
+        }
+        return { answer: `${patientName}'s chart does not indicate deceased status. There are no active medications or recent observations to confirm, but no death record exists.`, citations, hasMatch: true, confidence: 0.7 };
+      }
       const dob = patient.birthDate;
 
       if (/how\s+old|age|born|birth|dob/i.test(lower)) {

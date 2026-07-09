@@ -329,7 +329,7 @@ async function submitQuery() {
       document.getElementById('qCitations').style.display = 'block';
       document.getElementById('qCitationsList').innerHTML = d.citations.map(c=>`
         <div class="citation">
-          <div class="header"><span class="type">${c.sourceType}</span><span><span class="${c.confidence>=0.8?'conf-high':c.confidence>=0.5?'conf-mid':'conf-low'}">${(c.confidence*100).toFixed(0)}%</span><span style="font-size:11px;color:var(--muted);margin-left:8px">${c.date||'N/A'}</span></span></div>
+          <div class="header"><span class="type">${c.sourceType}</span><span><span style="font-size:11px;color:var(--muted);margin-left:8px">${c.date||'N/A'}</span></span></div>
           <div class="display">${c.display}</div>
           ${c.snippet?`<div class="snippet">"${c.snippet}"</div>`:''}
           <div class="author">By: ${c.author||'Unknown'} | FHIR: ${c.fhirReference}</div>
