@@ -30,7 +30,7 @@ Return ONLY valid JSON. No explanations, no markdown.
 
 {
   "medication": string|null,
-  "query_type": "allergy_check"|"medication_list"|"lab_query"|"allergy_list"|"unknown",
+  "query_type": "allergy_check"|"medication_list"|"lab_query"|"allergy_list"|"demographic"|"unknown",
   "parameters": {
     "drug_name": string|null,
     "drug_class": string|null,
@@ -40,6 +40,8 @@ Return ONLY valid JSON. No explanations, no markdown.
     "condition": string|null
   }
 }
+
+query_type "demographic" means the user is asking about patient age, date of birth, name, gender, or MRN. Use this for questions like "how old is he", "when was she born", "what's his name", etc.
 
 Examples:
 Q: "Does the patient have any allergies to penicillin?"
@@ -53,6 +55,12 @@ A: {"medication":null,"query_type":"lab_query","parameters":{"drug_name":null,"d
 
 Q: "What allergies does the patient have?"
 A: {"medication":null,"query_type":"allergy_list","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
+
+Q: "how old he be?"
+A: {"medication":null,"query_type":"demographic","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
+
+Q: "how old is this dude"
+A: {"medication":null,"query_type":"demographic","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
 
 Q: "What color is the sky?"
 A: {"medication":null,"query_type":"unknown","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}`;
@@ -209,6 +217,7 @@ async function parseQuery(question) {
       medication_list: 'medication_list',
       lab_query: 'abnormal_labs',
       allergy_list: 'allergy_list',
+      demographic: 'demographic',
     };
 
     const type = typeMap[llmResult.query_type] || llmResult.query_type;

@@ -68,8 +68,13 @@ const LAB_QUERY_PATTERNS = [
 ];
 
 const DEMOGRAPHIC_PATTERNS = [
-  /how\s+old\s+(?:is|are)\s*(?:he|she|they|the\s+patient|this\s+patient|the\s+pt|pt)?\s*\??/i,
-  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?(?:age|birth\s*date|dob|birthday|date\s+of\s+birth)\s*\??/i,
+  /how\s+old\s+(?:is|are|be|was|were)\s*(?:he|she|they|the\s+patient|this\s+patient|the\s+pt|pt|this\s+dude|this\s+guy|this\s+lady|this\s+man|this\s+woman)?\s*\??/i,
+  /how\s+old\s+he\b/i,
+  /how\s+old\s+she\b/i,
+  /how\s+old\s+they\b/i,
+  /how\s+old\s*(?:\?|$)/i,
+  /what'?s?\s+(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?age\s*\??/i,
+  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?(?:birth\s*date|dob|birthday|date\s+of\s+birth)\s*\??/i,
   /when\s+was\s+(?:he|she|they|the\s+patient|this\s+patient)\s+born\??/i,
   /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?name\s*\??/i,
   /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?(?:gender|sex)\s*\??/i,
