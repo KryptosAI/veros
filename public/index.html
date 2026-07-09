@@ -325,15 +325,28 @@ async function submitQuery() {
       document.getElementById('qAnswer').textContent = d.answer;
       document.getElementById('qPolicy').textContent = d.policy==='all_cited'?'✓ ALL CLAIMS CITED':d.policy==='negative_findings'?'○ NEGATIVE FINDINGS':d.policy==='no_source_no_answer'?'⊘ NO SOURCE, NO ANSWER':'';
   document.getElementById('qMeta').textContent = `Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms | via ${d.parsedBy||'rule'}`;
-  if (d.citations?.length > 0) {
+    if (d.citations?.length > 0) {
       document.getElementById('qCitations').style.display = 'block';
       document.getElementById('qCitationsList').innerHTML = d.citations.map(c=>`
         <div class="citation">
-          <div class="header"><span class="type">${c.sourceType}</span><span><span style="font-size:11px;color:var(--muted);margin-left:8px">${c.date||'N/A'}</span></span></div>
+          <div class="header"><span class="type">${c.sourceType}</span><span style="font-size:11px;color:var(--muted);margin-left:8px">${c.date||'N/A'}</span></div>
           <div class="display">${c.display}</div>
           ${c.snippet?`<div class="snippet">"${c.snippet}"</div>`:''}
           <div class="author">By: ${c.author||'Unknown'} | FHIR: ${c.fhirReference}</div>
         </div>`).join('');
+    }
+    if (d.research?.length > 0) {
+      const rDiv = document.createElement('div');
+      rDiv.className = 'card';
+      rDiv.style.marginTop = '12px';
+      rDiv.innerHTML = '<h3>📚 Research Citations</h3>' + d.research.map(p=>`
+        <div class="citation" style="border-left:3px solid var(--violet)">
+          <div class="display">${p.title}</div>
+          <div style="font-size:11px;color:var(--muted)">${p.authors} — ${p.journal}, ${p.year}</div>
+          ${p.snippet?`<div class="snippet" style="margin-top:4px">"${p.snippet.substring(0,200)}..."</div>`:''}
+          ${p.url?`<a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent)">View on Semantic Scholar →</a>`:''}
+        </div>`).join('');
+      document.getElementById('queryResult').appendChild(rDiv);
     }
   } catch(e) {
     if (attempts < maxAttempts) { attempts++; await new Promise(r=>setTimeout(r,800)); return tryFetch(); }

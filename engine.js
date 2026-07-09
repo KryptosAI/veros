@@ -2,6 +2,7 @@ const { ROLES, getUserById } = require('./data');
 const store = require('./store');
 const { parseQuery: llmParseQuery, LLM_CONFIG } = require('./llm-adapter');
 const { INTENTS, findIntent, generateCitation, generateLLMPrompt } = require('./intents');
+const { searchResearch } = require('./research');
 
 function validatePermissions(userId, patientId, resourceTypes) {
   const user = getUserById(userId);
@@ -114,10 +115,15 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     let finalAnswer = templateAnswer.answer;
     let finalCitations = templateAnswer.citations;
 
-    // For complex or non-demographic questions, let the LLM formulate a better answer
+    // For non-demographic questions, let the LLM formulate a better answer + search research
+    let research = [];
     if (LLM_CONFIG.enabled && intentName !== 'demographic') {
       const dataBundle = buildDataBundle(patientId, patientName);
-      const llmAnswer = await askLLM(question, dataBundle, patientName);
+      const [llmAnswer, researchResults] = await Promise.all([
+        askLLM(question, dataBundle, patientName),
+        searchResearchForQuestion(question, patientId, patientName),
+      ]);
+      research = researchResults;
       if (llmAnswer && llmAnswer.length > 10) {
         finalAnswer = llmAnswer;
       }
@@ -125,7 +131,8 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
 
     return {
       success: true, question, understanding, searched: searchedTypes,
-      answer: finalAnswer, citations: finalCitations, hasMatch: templateAnswer.hasMatch,
+      answer: finalAnswer, citations: finalCitations, research: research,
+      hasMatch: templateAnswer.hasMatch,
       confidence: templateAnswer.confidence, policy: 'all_cited',
       permissions: perm, responseTimeMs: rt, parsedBy: 'llm',
       audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, intentName, searchedTypes, finalCitations.map(c => ({ type: c.sourceType, id: c.sourceId })), finalCitations.length, finalAnswer.substring(0, 500), rt, sourceIp, true),
@@ -193,6 +200,13 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     permissions: perm, responseTimeMs: rt, parsedBy: 'llm',
     audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, 'llm_fallback', allRT, citations.map(c => ({ type: c.sourceType, id: c.sourceId })), citations.length, answer.substring(0, 500), rt, sourceIp, true),
   };
+}
+
+async function searchResearchForQuestion(question, patientId, patientName) {
+  const conditions = store.searchConditions(patientId);
+  const conditionNames = conditions.map(c => c.code?.text).filter(Boolean).join(' ');
+  const query = `${question} ${conditionNames}`.substring(0, 300);
+  return searchResearch(query, 3);
 }
 
 function buildDataBundle(patientId, patientName) {
