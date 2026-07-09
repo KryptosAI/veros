@@ -103,9 +103,11 @@ function verifyProposition(proposition, patientId) {
 function determinePropositionType(text) {
   const lower = text.toLowerCase();
   if (/allerg|adverse\s*reaction|intoleranc|hypersensitivity|rash|hives|anaphylaxis/i.test(lower)) return 'allergy';
-  if (/medication|prescribed|taking|meds?|drug|injection|drops|mg|mcg/i.test(lower)) return 'medication';
+  if (/\b(?:taking|prescribed|on|receives?|receiving|using)\s+\w/i.test(lower)) return 'medication';
+  if (/medication|meds?|drug|injection|drops|mg|mcg/i.test(lower)) return 'medication';
   if (/lab|test|value|level|result|a1c|glucose|egfr|creatinine|iop|pressure|acuity|vision/i.test(lower)) return 'lab';
-  if (/condition|diagnosis|diagnosed|history\s*of\s*(?!adverse)|has\s+(?:a\s+)?history|suffers? from/i.test(lower)) return 'condition';
+  if (/\b(?:has|have|with)\s+(?!(?:an?|no|any)\s)(?:a\s+)?(?:history\s+of\s+)?\w/i.test(lower) && !/allerg|reaction|rash/i.test(lower)) return 'condition';
+  if (/condition|diagnosis|diagnosed|history\s*of|suffers? from/i.test(lower)) return 'condition';
   return 'unknown';
 }
 
