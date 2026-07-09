@@ -570,8 +570,16 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     };
   }
 
-  const llmParsed = await llmParseQuery(question);
-  const parsed = (llmParsed && llmParsed.type !== 'unknown') ? llmParsed : parseQuery(question);
+  // Regex first — covers 80%+ of queries in 0ms
+  let parsed = parseQuery(question);
+
+  // Only hit the LLM if regex couldn't match
+  if (parsed.type === 'unknown') {
+    const llmParsed = await llmParseQuery(question);
+    if (llmParsed && llmParsed.type !== 'unknown') {
+      parsed = llmParsed;
+    }
+  }
 
   if (parsed.type === 'unknown') {
     const fallbackResult = searchFHIRFallback(patientId, question);
