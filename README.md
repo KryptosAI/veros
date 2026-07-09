@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo/veros-banner.png" alt="Veros" width="512">
+</p>
+
 # Veros
 
 **Clinical ground truth for AI.**
