@@ -198,4 +198,14 @@ async function parseQuery(question) {
   return { ...regexResult, parsedBy: 'regex' };
 }
 
-module.exports = { parseQuery, llmParseQuery, regexParseQuery, LLM_CONFIG, SYSTEM_PROMPT };
+async function callLLM(prompt) {
+  if (LLM_CONFIG.cloudProvider) {
+    return callCloud(prompt);
+  }
+  if (LLM_CONFIG.provider === 'ollama') {
+    return callOllama(LLM_CONFIG.ollamaModel, prompt);
+  }
+  return null;
+}
+
+module.exports = { parseQuery, llmParseQuery, regexParseQuery, LLM_CONFIG, SYSTEM_PROMPT, callLLM };

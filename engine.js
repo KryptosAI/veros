@@ -1,6 +1,6 @@
 const { ROLES, getUserById } = require('./data');
 const store = require('./store');
-const { parseQuery: llmParseQuery } = require('./llm-adapter');
+const { parseQuery: llmParseQuery, LLM_CONFIG } = require('./llm-adapter');
 const { INTENTS, findIntent, generateCitation, generateLLMPrompt } = require('./intents');
 
 function validatePermissions(userId, patientId, resourceTypes) {
@@ -104,19 +104,31 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
   const understanding = humanizeIntent(intentName || 'search');
   const searchedTypes = intent ? intent.resourceTypes : allRT;
 
-  // 3. Run the intent handler if found
+  // 3. Run the intent handler — gather data, then let LLM formulate the answer
   if (intent) {
     const searchParams = (interpretation?.llmRaw?.parameters) || (interpretation?.medication ? { medication: interpretation.medication } : {}) || fallbackParams;
     const result = intent.search(patientId, searchParams, question);
-    const answer = intent.answer(patientName, result, searchParams, question);
+    const templateAnswer = intent.answer(patientName, result, searchParams, question);
     const rt = Date.now() - startTime;
+
+    let finalAnswer = templateAnswer.answer;
+    let finalCitations = templateAnswer.citations;
+
+    // For complex or non-demographic questions, let the LLM formulate a better answer
+    if (LLM_CONFIG.enabled && intentName !== 'demographic') {
+      const dataBundle = buildDataBundle(patientId, patientName);
+      const llmAnswer = await askLLM(question, dataBundle, patientName);
+      if (llmAnswer && llmAnswer.length > 10) {
+        finalAnswer = llmAnswer;
+      }
+    }
 
     return {
       success: true, question, understanding, searched: searchedTypes,
-      answer: answer.answer, citations: answer.citations, hasMatch: answer.hasMatch,
-      confidence: answer.confidence, policy: 'all_cited',
+      answer: finalAnswer, citations: finalCitations, hasMatch: templateAnswer.hasMatch,
+      confidence: templateAnswer.confidence, policy: 'all_cited',
       permissions: perm, responseTimeMs: rt, parsedBy: 'llm',
-      audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, intentName, searchedTypes, answer.citations.map(c => ({ type: c.sourceType, id: c.sourceId })), answer.citations.length, answer.answer.substring(0, 500), rt, sourceIp, true),
+      audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, intentName, searchedTypes, finalCitations.map(c => ({ type: c.sourceType, id: c.sourceId })), finalCitations.length, finalAnswer.substring(0, 500), rt, sourceIp, true),
     };
   }
 
@@ -150,14 +162,90 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     };
   }
 
-  // 5. Nothing found — patient summary
-  const summary = chartSummary(patientId, patientName);
-  return {
-    success: true, question, understanding: 'Assembling chart overview', searched: allRT,
-    answer: summary.text, citations: summary.citations, hasMatch: true, confidence: 0.2, policy: 'chart_summary',
-    permissions: perm, responseTimeMs: rt, parsedBy: 'llm',
-    audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, 'chart_summary', allRT, summary.citations.map(c => ({ type: c.sourceType, id: c.sourceId })), summary.citations.length, summary.text.substring(0, 500), rt, sourceIp, true),
+  // 5. Nothing found — give the LLM all patient data and let it answer the question directly
+  const allData = {
+    patient: store.getResource('Patient', patientId),
+    conditions: store.searchConditions(patientId),
+    allergies: store.searchAllAllergies(patientId),
+    medications: store.searchAllMedications(patientId),
+    observations: store.searchObservations(patientId),
   };
+
+  const citations = [];
+  if (allData.patient) citations.push(generateCitation(allData.patient));
+  for (const c of allData.conditions) citations.push(generateCitation(c));
+  for (const a of allData.allergies) citations.push(generateCitation(a));
+  for (const m of allData.medications) citations.push(generateCitation(m));
+
+  // Let the LLM reason about the question using all available data
+  let answer;
+  if (LLM_CONFIG.enabled) {
+    const llmAnswer = await askLLM(question, allData, patientName);
+    if (llmAnswer) answer = llmAnswer;
+  }
+  if (!answer) {
+    answer = buildStaticSummary(patientName, allData);
+  }
+
+  return {
+    success: true, question, understanding: 'Analyzing full chart for your question', searched: allRT,
+    answer, citations, hasMatch: true, confidence: 0.5, policy: 'llm_reasoned',
+    permissions: perm, responseTimeMs: rt, parsedBy: 'llm',
+    audit: mkAudit(userId, perm.role, perm.userName, patientId, patientName, question, 'llm_fallback', allRT, citations.map(c => ({ type: c.sourceType, id: c.sourceId })), citations.length, answer.substring(0, 500), rt, sourceIp, true),
+  };
+}
+
+function buildDataBundle(patientId, patientName) {
+  const patient = store.getResource('Patient', patientId);
+  return {
+    patient: patient ? { name: patientName, gender: patient.gender, birthDate: patient.birthDate, mrn: patient.identifier?.[0]?.value, deceased: patient.deceasedBoolean || patient.deceasedDateTime || null } : null,
+    conditions: store.searchConditions(patientId).map(c => ({ name: c.code?.text, status: c.clinicalStatus?.coding?.[0]?.code, onsetDate: c.onsetDateTime })),
+    allergies: store.searchAllAllergies(patientId).map(a => ({ substance: a.code?.text, criticality: a.criticality, status: a.clinicalStatus?.coding?.[0]?.code, reaction: a.reaction?.[0]?.manifestation?.[0]?.text })),
+    medications: store.searchAllMedications(patientId).map(m => ({ name: m.medicationCodeableConcept?.text, status: m.status, instructions: m.dosageInstruction?.[0]?.text })),
+    observations: store.searchObservations(patientId).map(o => ({ name: o.code?.text, value: o.valueQuantity?.value, unit: o.valueQuantity?.unit, date: o.effectiveDateTime })).slice(0, 15),
+  };
+}
+
+async function askLLM(question, data, patientName) {
+  const { callLLM } = require('./llm-adapter');
+  const context = JSON.stringify({
+    patient: data.patient ? { name: patientName, gender: data.patient.gender, birthDate: data.patient.birthDate, mrn: data.patient.identifier?.[0]?.value, deceased: data.patient.deceasedBoolean || data.patient.deceasedDateTime || null } : null,
+    conditions: (data.conditions || []).map(c => ({ name: c.code?.text, status: c.clinicalStatus?.coding?.[0]?.code, onsetDate: c.onsetDateTime })),
+    allergies: (data.allergies || []).map(a => ({ substance: a.code?.text, criticality: a.criticality, status: a.clinicalStatus?.coding?.[0]?.code, reaction: a.reaction?.[0]?.manifestation?.[0]?.text })),
+    medications: (data.medications || []).map(m => ({ name: m.medicationCodeableConcept?.text, status: m.status, instructions: m.dosageInstruction?.[0]?.text })),
+    observations: (data.observations || []).map(o => ({ name: o.code?.text, value: o.valueQuantity?.value, unit: o.valueQuantity?.unit, date: o.effectiveDateTime })).slice(0, 10),
+  });
+
+  const prompt = `You are answering a clinical question about a patient using their medical chart data. Answer concisely and cite specific findings when relevant. Never make up information not present in the data.
+
+Patient chart data:
+${context}
+
+Question: "${question}"
+
+Answer the question based ONLY on the chart data above. If the data doesn't contain enough information to answer, say so honestly and state what you did find. Keep your answer under 3 sentences.`;
+
+  try {
+    const response = await callLLM(prompt);
+    return response?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildStaticSummary(patientName, data) {
+  const p = data.patient;
+  const dob = p?.birthDate;
+  let age = 'unknown';
+  if (dob) { const b = new Date(dob); const n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; age = a; }
+  const activeConds = (data.conditions || []).filter(c => c.clinicalStatus?.coding?.[0]?.code === 'active');
+  const activeMeds = (data.medications || []).filter(m => m.status === 'active');
+  const activeAllergies = (data.allergies || []).filter(a => a.verificationStatus?.coding?.[0]?.code !== 'refuted');
+  let text = `${patientName}, ${age}yo ${p?.gender || ''}, MRN ${p?.identifier?.[0]?.value || 'N/A'}. `;
+  if (activeConds.length) text += `Conditions: ${activeConds.map(c => c.code?.text).join(', ')}. `;
+  if (activeAllergies.length) text += `Allergies: ${activeAllergies.map(a => a.code?.text).join(', ')}. `;
+  if (activeMeds.length) text += `Meds: ${activeMeds.map(m => m.medicationCodeableConcept?.text).join(', ')}. `;
+  return text.trim();
 }
 
 function mkAudit(userId, role, name, patientId, patientName, queryText, intent, queried, accessed, returned, summary, ms, ip, success, errReason) {
