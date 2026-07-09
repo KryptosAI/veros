@@ -22,24 +22,26 @@ function isPropositionValid(text) {
 
 // ── Claim decomposition ──────────────────────────────
 async function decomposeClaim(claimText) {
-  const simplePatterns = [
-    /^allergic to \w/i, /^allergy to \w/i, /reacts? to \w/i,
-    /^(?:the )?patient is allergic/i, /^(?:the )?patient has an? (?:allerg|react)/i,
-    /^(?:has|got|have) an? allerg/i,
-    /^(?:is|are) (?:the patient|they|he|she) allergic/i,
-    /^no known drug allerg/i, /^NKDA/i,
-    /^(?:taking|prescribed|on) \w/i,
-    /^(?:has|diagnosed with) \w/i,
-    /^(?:the )?patient (?:has|is) \w/i,
-    /^(?:his|her|their) (?:name|age|gender|dob|mrn)/i,
-  ];
-  const isSimple = simplePatterns.some(p => p.test(claimText));
-  if (isSimple) return [claimText];
+  // Check for conjunctions first — compound claims always decompose
+  const hasConjunctions = /\band\b|\bbut\b|\bwhile\b|\balso\b|\badditionally\b/.test(claimText);
+  if (!hasConjunctions) {
+    const simplePatterns = [
+      /^allergic to \w/i, /^allergy to \w/i, /reacts? to \w/i,
+      /^(?:the )?patient is allergic/i, /^(?:the )?patient has an? (?:allerg|react)/i,
+      /^(?:has|got|have) an? allerg/i,
+      /^(?:is|are) (?:the patient|they|he|she) allergic/i,
+      /^no known drug allerg/i, /^NKDA/i,
+      /^(?:taking|prescribed|on) \w/i,
+      /^(?:has|diagnosed with) \w/i,
+      /^(?:the )?patient (?:has|is) \w/i,
+      /^(?:his|her|their) (?:name|age|gender|dob|mrn)/i,
+    ];
+    if (simplePatterns.some(p => p.test(claimText))) return [claimText];
+  }
 
-  // Try regex-based splitting on "and" / "but" / "while" for compound claims
+  // Regex-based splitting on conjunctions
   const conjunctions = claimText.split(/\s+(?:and|but|while|,?\s*(?:also|additionally))\s+/i).map(s => s.trim()).filter(s => s.length > 5);
   if (conjunctions.length > 1) {
-    // Check if each part looks like a standalone claim
     const allLookValid = conjunctions.every(c =>
       /\b(?:allerg|reaction|has|taking|prescribed|on|diagnosed|condition)\b/i.test(c) || c.length > 15
     );
