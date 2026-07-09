@@ -368,14 +368,24 @@ async function submitQuery() {
       const tDiv = document.createElement('div');
       tDiv.className = 'card';
       tDiv.style.marginTop = '12px';
-      tDiv.innerHTML = '<h3>🔬 Clinical Trials</h3><div style="font-size:11px;color:var(--muted);margin-bottom:10px">Matching trials from ClinicalTrials.gov. This is not medical advice — consult your physician before pursuing any trial.</div>' + d.trials.map(t=>`
+      tDiv.innerHTML = '<h3>🔬 Clinical Trials</h3><div style="font-size:11px;color:var(--muted);margin-bottom:10px">Matching trials from ClinicalTrials.gov. This is not medical advice — consult your physician before pursuing any trial.</div>' + d.trials.map(t=>{
+        const ageOk = t.patientMatches?.age === 'matches';
+        const genderOk = t.patientMatches?.gender === 'matches';
+        const matchTags = [];
+        if (t.patientMatches?.age === 'matches') matchTags.push('<span style="color:var(--success);font-size:10px">✓ age</span>');
+        else if (t.patientMatches?.age === 'too_young' || t.patientMatches?.age === 'too_old') matchTags.push(`<span style="color:var(--danger);font-size:10px">✗ age</span>`);
+        if (t.patientMatches?.gender === 'matches') matchTags.push('<span style="color:var(--success);font-size:10px">✓ gender</span>');
+        else if (t.patientMatches?.gender === 'gender_mismatch') matchTags.push('<span style="color:var(--danger);font-size:10px">✗ gender</span>');
+        return `
         <div class="citation" style="border-left:3px solid #0ea5e9">
-          <div class="header"><span class="type">${t.nctId}</span><span style="font-size:11px;color:var(--muted)">${t.status} | Updated ${t.lastUpdated}</span></div>
+          <div class="header"><span class="type">${t.nctId}</span><span>${matchTags.join(' ')}<span style="font-size:11px;color:var(--muted);margin-left:8px">${t.status} | ${t.lastUpdated}</span></span></div>
           <div class="display">${t.title}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${(t.phases||[]).join(', ') || 'N/A'} | ${t.conditions?.join(', ') || 'N/A'}</div>
+          ${t.minAge || t.maxAge ? `<div style="font-size:11px;color:var(--muted)">Age: ${t.minAge||'N/A'}–${t.maxAge||'N/A'} | Gender: ${t.gender||'ALL'}</div>` : ''}
           ${t.locations?.length ? `<div style="font-size:11px;color:var(--muted)">Nearest: ${t.locations.map(l=>l.facility+' ('+l.city+', '+l.state+')').join('; ')}</div>` : ''}
           ${t.url?`<a href="${t.url}" target="_blank" style="font-size:11px;color:var(--accent)">View on ClinicalTrials.gov →</a>`:''}
-        </div>`).join('');
+        </div>`;
+      }).join('');
       document.getElementById('queryResult').appendChild(tDiv);
     }
   } catch(e) {

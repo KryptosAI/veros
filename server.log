@@ -286,3 +286,25 @@ Veros v0.3 — Clinical Ground Truth for AI
   SMART:   http://localhost:3100/.well-known/smart-configuration
   UI:      http://localhost:3100
 
+2026-07-09T20:29:45.923Z START
+
+Veros v0.3 — Clinical Ground Truth for AI
+  Patients: 4 | Total FHIR resources: 45
+  LLM: deepseek (deepseek-chat)
+  Query:   POST /api/query        — Ask questions, get cited answers
+  Verify:  POST /api/verify       — Verify AI claims against FHIR truth
+  Bulk:    POST /api/verify/bulk  — Verify multiple claims at once
+  SMART:   http://localhost:3100/.well-known/smart-configuration
+  UI:      http://localhost:3100
+
+2026-07-09T20:35:07.916Z START
+
+Veros v0.3 — Clinical Ground Truth for AI
+  Patients: 4 | Total FHIR resources: 45
+  LLM: deepseek (deepseek-chat)
+  Query:   POST /api/query        — Ask questions, get cited answers
+  Verify:  POST /api/verify       — Verify AI claims against FHIR truth
+  Bulk:    POST /api/verify/bulk  — Verify multiple claims at once
+  SMART:   http://localhost:3100/.well-known/smart-configuration
+  UI:      http://localhost:3100
+

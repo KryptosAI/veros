@@ -128,7 +128,10 @@ async function processQuery(question, patientId, userId, patientName, sourceIp, 
       ];
       if (includeTrials) {
         const conditions = store.searchConditions(patientId).map(c => c.code?.text).filter(Boolean);
-        promises.push(conditions.length ? searchTrials(conditions, 5) : Promise.resolve([]));
+        const patient = store.getResource('Patient', patientId);
+        const age = patient?.birthDate ? (() => { const b = new Date(patient.birthDate); const n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a; })() : null;
+        const ctx = { age, gender: patient?.gender || null };
+        promises.push(conditions.length ? searchTrials(conditions, ctx, 5) : Promise.resolve([]));
       }
       try {
         const results = await Promise.allSettled(promises);
