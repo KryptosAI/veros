@@ -40,6 +40,10 @@ const REGEX_PATTERNS = [
   { pattern: /(?:date\s+of\s+)?birth|dob\b|birthday/i, intent: 'demographic' },
   { pattern: /when\s+was\s+(?:he|she|they|the\s+patient)\s+born/i, intent: 'demographic' },
   { pattern: /what\s+(?:is|are)\s+(?:his|her|their|the\s+patient'?s?)\s+(?:name|gender|sex|MRN)/i, intent: 'demographic' },
+  { pattern: /what\s+is\s+this\??\s*$/i, intent: 'chart_overview' },
+  { pattern: /(?:tell\s+me\s+)?(?:about|summarize|overview|explain)\s+(?:this\s+(?:patient|chart|record)?|the\s+patient|the\s+chart)/i, intent: 'chart_overview' },
+  { pattern: /what\s+(?:am\s+I|are\s+we)\s+looking\s+at/i, intent: 'chart_overview' },
+  { pattern: /^(?:what|who)\s+is\s+this\??\s*$/i, intent: 'chart_overview' },
 ];
 
 function regexParseQuestion(question) {

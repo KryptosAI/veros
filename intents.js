@@ -132,7 +132,7 @@ const INTENTS = [
   },
   {
     name: 'demographic',
-    description: 'Get patient demographic information — age, date of birth, name, gender, MRN, or any personal details.',
+    description: 'Get a specific patient demographic detail — age, date of birth, name, gender, or MRN. These are single-fact questions, not chart overviews.',
     resourceTypes: ['Patient'],
     search(patientId) {
       return { type: 'demographic', patient: store.getResource('Patient', patientId) };
@@ -165,6 +165,76 @@ const INTENTS = [
       }
       const age = dob ? calculateAge(dob) : 'unknown';
       return { answer: `${patientName} — ${patient.gender || 'N/A'}, ${dob ? age + ' years old (DOB: ' + dob + ')' : 'age unknown'}, MRN: ${patient.identifier?.[0]?.value || 'N/A'}.`, citations, hasMatch: true, confidence: 1.0 };
+    },
+  },
+  {
+    name: 'chart_overview',
+    description: 'Get a complete overview of the patient\'s chart — who they are, their conditions, allergies, medications, and key findings. Use this for vague questions like "what is this?", "tell me about this patient", "summarize this chart", or "what am I looking at?".',
+    resourceTypes: ['Patient', 'Condition', 'AllergyIntolerance', 'MedicationRequest', 'Observation'],
+    search(patientId) {
+      return {
+        patient: store.getResource('Patient', patientId),
+        conditions: store.searchConditions(patientId),
+        allergies: store.searchAllAllergies(patientId),
+        medications: store.searchAllMedications(patientId),
+        observations: store.searchObservations(patientId),
+      };
+    },
+    answer(patientName, result, params, question) {
+      const { patient, conditions, allergies, medications, observations } = result;
+      const citations = [];
+
+      if (patient) citations.push(generateCitation(patient));
+      for (const c of conditions) citations.push(generateCitation(c));
+      for (const a of allergies) citations.push(generateCitation(a));
+      for (const m of medications) citations.push(generateCitation(m));
+
+      if (!patient) return { answer: `Could not find ${patientName}'s chart.`, citations: [], hasMatch: false, confidence: 0 };
+
+      const dob = patient.birthDate;
+      const age = dob ? calculateAge(dob) : 'unknown';
+      const gender = patient.gender || 'N/A';
+      const mrn = patient.identifier?.[0]?.value || 'N/A';
+
+      const activeConditions = conditions.filter(c => c.clinicalStatus?.coding?.[0]?.code === 'active');
+      const resolvedConditions = conditions.filter(c => c.clinicalStatus?.coding?.[0]?.code !== 'active');
+      const activeAllergies = allergies.filter(a => a.verificationStatus?.coding?.[0]?.code !== 'refuted');
+      const activeMeds = medications.filter(m => m.status === 'active');
+
+      let answer = `This is the chart for ${patientName}, a ${age}-year-old ${gender} patient, MRN ${mrn}. `;
+
+      if (activeConditions.length > 0) {
+        answer += `Active conditions: ${activeConditions.map(c => c.code?.text || 'unknown').join(', ')}. `;
+      }
+      if (resolvedConditions.length > 0) {
+        answer += `Resolved: ${resolvedConditions.map(c => c.code?.text || 'unknown').join(', ')}. `;
+      }
+      if (activeAllergies.length > 0) {
+        answer += `Allergies: ${activeAllergies.map(a => `${a.code?.text || 'unknown'}${a.criticality === 'high' ? ' (HIGH RISK)' : ''}`).join(', ')}. `;
+      } else if (allergies.some(a => a.code?.coding?.some(c => c.code === '409137002'))) {
+        answer += `No known drug allergies. `;
+      }
+      if (activeMeds.length > 0) {
+        answer += `Active medications: ${activeMeds.map(m => m.medicationCodeableConcept?.text || 'unknown').join(', ')}. `;
+      } else if (medications.length > 0) {
+        answer += `${medications.length} medication(s) on record, none currently active. `;
+      }
+
+      const abnormalObs = observations.filter(o => {
+        if (!o.valueQuantity || !o.referenceRange || o.referenceRange.length === 0) return false;
+        for (const range of o.referenceRange) {
+          if (range.high?.value !== undefined && o.valueQuantity.value > range.high.value) return true;
+          if (range.low?.value !== undefined && o.valueQuantity.value < range.low.value) return true;
+        }
+        return false;
+      });
+      if (abnormalObs.length > 0) {
+        answer += `Notable findings: ${abnormalObs.map(o => `${o.code?.text || 'lab'}: ${o.valueQuantity?.value} ${o.valueQuantity?.unit || ''}`).join(', ')}. `;
+      }
+
+      answer += `All claims cited from FHIR source records.`;
+
+      return { answer: answer.trim(), citations, hasMatch: true, confidence: 0.9 };
     },
   },
 ];

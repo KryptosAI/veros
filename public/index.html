@@ -324,8 +324,8 @@ async function submitQuery() {
       if (!r.ok || d.error) { document.getElementById('qError').style.display='block'; document.getElementById('qError').innerHTML=`<p>${d.error||'Error '+r.status}</p><button class="retry-btn" onclick="submitQuery()">Retry</button>`; document.getElementById('qAnswer').textContent=''; return; }
       document.getElementById('qAnswer').textContent = d.answer;
       document.getElementById('qPolicy').textContent = d.policy==='all_cited'?'✓ ALL CLAIMS CITED':d.policy==='negative_findings'?'○ NEGATIVE FINDINGS':d.policy==='no_source_no_answer'?'⊘ NO SOURCE, NO ANSWER':'';
-      document.getElementById('qMeta').textContent = `Confidence: ${d.confidence} | Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms | via ${d.parsedBy||'rule'}`;
-      if (d.citations?.length > 0) {
+  document.getElementById('qMeta').textContent = `Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms | via ${d.parsedBy||'rule'}`;
+  if (d.citations?.length > 0) {
       document.getElementById('qCitations').style.display = 'block';
       document.getElementById('qCitationsList').innerHTML = d.citations.map(c=>`
         <div class="citation">
