@@ -145,6 +145,8 @@ app.post('/api/query', authMiddleware, async (req, res) => {
 
   res.json({
     question: result.question,
+    understanding: result.understanding || '',
+    searched: result.searched || [],
     answer: result.answer,
     citations: result.citations,
     hasMatch: result.hasMatch,
@@ -152,7 +154,7 @@ app.post('/api/query', authMiddleware, async (req, res) => {
     policy: result.policy,
     permissions: { role: result.permissions.role, roleLabel: result.permissions.roleLabel, scopes: result.permissions.scopes },
     responseTimeMs: result.responseTimeMs,
-    parsedBy: result.parsed ? (result.parsed.parsedBy || 'rule') : 'rule',
+    parsedBy: result.parsedBy || 'llm',
   });
 });
 
@@ -175,12 +177,16 @@ app.post('/api/query/demo', async (req, res) => {
   }
 
   res.json({
-    question: result.question, answer: result.answer, citations: result.citations,
+    question: result.question,
+    understanding: result.understanding || '',
+    searched: result.searched || [],
+    answer: result.answer,
+    citations: result.citations,
     hasMatch: result.hasMatch,
     confidence: result.confidence, policy: result.policy,
     permissions: { role: result.permissions.role, roleLabel: result.permissions.roleLabel, scopes: result.permissions.scopes },
     responseTimeMs: result.responseTimeMs,
-    parsedBy: result.parsed ? (result.parsed.parsedBy || 'rule') : 'rule',
+    parsedBy: result.parsedBy || 'llm',
   });
 });
 
