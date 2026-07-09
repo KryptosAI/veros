@@ -204,8 +204,12 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
 
 async function searchResearchForQuestion(question, patientId, patientName) {
   const conditions = store.searchConditions(patientId);
-  const conditionNames = conditions.map(c => c.code?.text).filter(Boolean).join(' ');
-  const query = `${question} ${conditionNames}`.substring(0, 300);
+  const keyTerms = conditions.map(c => {
+    const text = c.code?.text || '';
+    const words = text.split(/[\s,()-]+/).filter(w => w.length > 3 && !/^(with|both|eyes|stage|class|type)$/i.test(w));
+    return words.join(' ');
+  }).filter(Boolean).join(' ').split(' ').filter((v,i,a) => a.indexOf(v)===i).slice(0, 6).join(' ');
+  const query = keyTerms || question.replace(/[?.,!]/g,'').split(' ').slice(0, 6).join(' ');
   return searchResearch(query, 3);
 }
 
