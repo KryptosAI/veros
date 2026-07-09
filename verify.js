@@ -131,8 +131,12 @@ function verifyAllergyClaim(claim, patientId) {
         });
       }
     } else {
+      // Show what WAS found to help the user understand
+      const allPatientAllergies = store.searchAllAllergies(patientId);
+      const allergyList = allPatientAllergies.map(a => a.code?.text || a.code?.coding?.[0]?.display || 'unknown').filter(Boolean);
+      const context = allergyList.length > 0 ? ` Found allergies on record: ${allergyList.join(', ')}.` : '';
       unverifiableParts.push({
-        detail: `No data found for ${medName} allergy or tolerance`,
+        detail: `No allergy record found for "${medName}".${context}${medClass ? ` Checked ${medClass.terms.length} substances in the ${medClass.className} class.` : ''}`,
         searched: ['AllergyIntolerance', 'MedicationRequest'],
       });
     }

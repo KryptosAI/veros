@@ -346,12 +346,70 @@ function setVerifyStructured(type, key, val) {
   document.getElementById('nlClaim').value = '';
 }
 
+function extractEntity(text, claimType) {
+  const lower = text.toLowerCase().replace(/[.,?!;:]+$/, '').trim();
+  
+  const stripPrefixes = [
+    /patient\s+is\s+allergic\s+to\s+/i,
+    /patient\s+is\s+allergic\s+/i,
+    /patient\s+allergic\s+to\s+/i,
+    /is\s+allergic\s+to\s+/i,
+    /is\s+allergic\s+/i,
+    /allergic\s+to\s+/i,
+    /allergic\s+/i,
+    /allergy\s+to\s+/i,
+    /has\s+an?\s+allergy\s+to\s+/i,
+    /has\s+an?\s+allergy\s+/i,
+    /has\s+allergy\s+to\s+/i,
+    /has\s+allergy\s+/i,
+    /adverse\s+reaction\s+to\s+/i,
+    /reaction\s+to\s+/i,
+    /intoleran(?:ce|t)\s+to\s+/i,
+    /cannot\s+tolerate\s+/i,
+    /does\s+not\s+tolerate\s+/i,
+    /doesn'?t\s+tolerate\s+/i,
+    /sensitive\s+to\s+/i,
+    /problems?\s+with\s+/i,
+    /issue(?:s)?\s+with\s+/i,
+    /react(?:s|ed)?\s+to\s+/i,
+    /this\s+patient\s+/i,
+    /pt\s+/i,
+    /patient\s+/i,
+  ];
+
+  let entity = lower;
+  for (const prefix of stripPrefixes) {
+    const after = entity.replace(prefix, '').trim();
+    if (after !== entity) { entity = after; break; }
+  }
+
+  if (!entity || entity === lower) {
+    entity = lower.replace(/^patient\s+is\s+/, '').replace(/^patient\s+/, '').replace(/^this\s+patient\s+/, '').replace(/^pt\s+/, '').trim();
+  }
+
+  if (!entity || entity.length < 1) return null;
+
+  if (claimType === 'allergy') return { type: 'allergy', medication: entity };
+  if (claimType === 'condition') return { type: 'condition', condition: entity };
+  if (claimType === 'medication') return { type: 'medication', drug: entity };
+  if (claimType === 'lab') return { type: 'lab', test: entity };
+  return null;
+}
+
 async function submitVerify() {
   if (!selectedPatient || !selectedUser) { alert('Select patient and user first'); return; }
   const nlClaim = document.getElementById('nlClaim').value.trim();
   let claim;
   if (nlClaim) {
-    claim = nlClaim;
+    const selectedType = document.getElementById('claimType').value;
+    // When user selects a claim type AND enters NL text, extract the entity from the text
+    // instead of relying on the server to parse both type and entity
+    const entity = extractEntity(nlClaim, selectedType);
+    if (entity && selectedType !== 'relationship') {
+      claim = entity;
+    } else {
+      claim = nlClaim;
+    }
   } else {
     const type = document.getElementById('claimType').value;
     const f1 = document.getElementById('fld1');
