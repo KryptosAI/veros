@@ -199,31 +199,55 @@ function buildDataBundle(patientId, patientName) {
   const patient = store.getResource('Patient', patientId);
   return {
     patient: patient ? { name: patientName, gender: patient.gender, birthDate: patient.birthDate, mrn: patient.identifier?.[0]?.value, deceased: patient.deceasedBoolean || patient.deceasedDateTime || null } : null,
-    conditions: store.searchConditions(patientId).map(c => ({ name: c.code?.text, status: c.clinicalStatus?.coding?.[0]?.code, onsetDate: c.onsetDateTime })),
-    allergies: store.searchAllAllergies(patientId).map(a => ({ substance: a.code?.text, criticality: a.criticality, status: a.clinicalStatus?.coding?.[0]?.code, reaction: a.reaction?.[0]?.manifestation?.[0]?.text })),
-    medications: store.searchAllMedications(patientId).map(m => ({ name: m.medicationCodeableConcept?.text, status: m.status, instructions: m.dosageInstruction?.[0]?.text })),
-    observations: store.searchObservations(patientId).map(o => ({ name: o.code?.text, value: o.valueQuantity?.value, unit: o.valueQuantity?.unit, date: o.effectiveDateTime })).slice(0, 15),
+    conditions: store.searchConditions(patientId).map(c => ({ name: c.code?.text || c.code?.coding?.[0]?.display || 'Unknown', status: c.clinicalStatus?.coding?.[0]?.code || 'unknown', onsetDate: c.onsetDateTime })),
+    allergies: store.searchAllAllergies(patientId).map(a => ({ substance: a.code?.text || a.code?.coding?.[0]?.display || 'Unknown', criticality: a.criticality || 'unknown', status: a.clinicalStatus?.coding?.[0]?.code || 'unknown', reaction: a.reaction?.[0]?.manifestation?.[0]?.text || '' })),
+    medications: store.searchAllMedications(patientId).map(m => ({ name: m.medicationCodeableConcept?.text || m.medicationCodeableConcept?.coding?.[0]?.display || 'Unknown', status: m.status || 'unknown', instructions: m.dosageInstruction?.[0]?.text || '' })),
+    observations: store.searchObservations(patientId).map(o => ({ name: o.code?.text || o.code?.coding?.[0]?.display || 'Unknown', value: o.valueQuantity?.value ?? o.valueString ?? 'N/A', unit: o.valueQuantity?.unit || '', date: o.effectiveDateTime || '' })).slice(0, 15),
   };
 }
 
 async function askLLM(question, data, patientName) {
   const { callLLM } = require('./llm-adapter');
-  const context = JSON.stringify({
-    patient: data.patient ? { name: patientName, gender: data.patient.gender, birthDate: data.patient.birthDate, mrn: data.patient.identifier?.[0]?.value, deceased: data.patient.deceasedBoolean || data.patient.deceasedDateTime || null } : null,
-    conditions: (data.conditions || []).map(c => ({ name: c.code?.text, status: c.clinicalStatus?.coding?.[0]?.code, onsetDate: c.onsetDateTime })),
-    allergies: (data.allergies || []).map(a => ({ substance: a.code?.text, criticality: a.criticality, status: a.clinicalStatus?.coding?.[0]?.code, reaction: a.reaction?.[0]?.manifestation?.[0]?.text })),
-    medications: (data.medications || []).map(m => ({ name: m.medicationCodeableConcept?.text, status: m.status, instructions: m.dosageInstruction?.[0]?.text })),
-    observations: (data.observations || []).map(o => ({ name: o.code?.text, value: o.valueQuantity?.value, unit: o.valueQuantity?.unit, date: o.effectiveDateTime })).slice(0, 10),
-  });
 
-  const prompt = `You are answering a clinical question about a patient using their medical chart data. Answer concisely and cite specific findings when relevant. Never make up information not present in the data.
+  // Format data as readable text, not JSON
+  let context = `Patient: ${patientName}\n`;
+  if (data.patient) {
+    context += `  Gender: ${data.patient.gender}, DOB: ${data.patient.birthDate}, MRN: ${data.patient.mrn}\n`;
+    if (data.patient.deceased) context += `  DECEASED: ${data.patient.deceased}\n`;
+  }
 
-Patient chart data:
+  const activeConds = (data.conditions || []).filter(c => c.status === 'active');
+  const resolvedConds = (data.conditions || []).filter(c => c.status !== 'active');
+  if (activeConds.length) context += `Active Conditions: ${activeConds.map(c => c.name).join(', ')}\n`;
+  if (resolvedConds.length) context += `Resolved Conditions: ${resolvedConds.map(c => c.name).join(', ')}\n`;
+
+  const activeAllergies = (data.allergies || []).filter(a => a.status !== 'refuted');
+  if (activeAllergies.length) context += `Allergies: ${activeAllergies.map(a => `${a.substance} (${a.criticality})`).join(', ')}\n`;
+
+  if (data.medications.length) {
+    const active = data.medications.filter(m => m.status === 'active');
+    const stopped = data.medications.filter(m => m.status === 'stopped');
+    const completed = data.medications.filter(m => m.status === 'completed');
+    if (active.length) context += `Active Medications: ${active.map(m => m.name).join(', ')}\n`;
+    if (stopped.length) context += `Stopped Medications: ${stopped.map(m => m.name).join(', ')}\n`;
+    if (completed.length) context += `Completed Medications: ${completed.map(m => m.name).join(', ')}\n`;
+  }
+
+  if (data.observations.length) {
+    context += `Lab Results:\n`;
+    for (const o of data.observations) {
+      context += `  ${o.name}: ${o.value}${o.unit ? ' ' + o.unit : ''} (${o.date})\n`;
+    }
+  }
+
+  const prompt = `You are answering a clinical question about a patient using their medical chart data. Answer concisely based ONLY on the data below. If the data doesn't contain the answer, say so honestly and state the most relevant findings you did find. Keep it under 3 sentences.
+
+PATIENT CHART:
 ${context}
 
-Question: "${question}"
+QUESTION: "${question}"
 
-Answer the question based ONLY on the chart data above. If the data doesn't contain enough information to answer, say so honestly and state what you did find. Keep your answer under 3 sentences.`;
+ANSWER:`;
 
   try {
     const response = await callLLM(prompt);
