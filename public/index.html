@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <header>
-    <div><h1><img src="/logo/veros-icon.png" alt="Veros" style="height:48px;width:48px;vertical-align:middle;margin-right:14px;margin-top:-4px">Veros <span class="badge">GROUND TRUTH</span><span class="badge2">v0.3</span></h1></div>
+    <div><h1><img src="/logo/veros-icon.png" alt="Veros" style="height:64px;width:64px;vertical-align:middle;margin-right:16px;margin-top:-6px">Veros <span class="badge">GROUND TRUTH</span><span class="badge2">v0.3</span></h1></div>
     <div style="font-size:12px;color:var(--muted)">Verify AI claims against FHIR truth &middot; Query &middot; Cite &middot; Audit</div>
   </header>
 
@@ -420,6 +420,148 @@ async function loadAudit() {
   } catch(e) {}
 }
 load();
+</script>
+
+<!-- Guided Walkthrough -->
+<style>
+  .tour-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: none; align-items: center; justify-content: center; }
+  .tour-overlay.active { display: flex; }
+  .tour-spotlight { position: fixed; z-index: 10000; pointer-events: none; border: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); display: none; }
+  .tour-tooltip { position: fixed; z-index: 10001; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); display: none; font-size: 14px; }
+  .tour-tooltip h2 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+  .tour-tooltip p { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .tour-tooltip .tour-buttons { display: flex; justify-content: space-between; align-items: center; }
+  .tour-tooltip .tour-buttons button { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; font-size: 13px; }
+  .tour-tooltip .tour-next { background: var(--accent); color: #fff; }
+  .tour-tooltip .tour-skip { background: transparent; color: var(--muted); border: none; font-size: 12px; }
+  .tour-tooltip .tour-back { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .tour-dots { display: flex; gap: 6px; }
+  .tour-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+  .tour-dot.active { background: var(--accent); }
+</style>
+
+<div class="tour-spotlight" id="tourSpotlight"></div>
+<div class="tour-tooltip" id="tourTooltip">
+  <h2 id="tourTitle"></h2>
+  <p id="tourBody"></p>
+  <div class="tour-buttons">
+    <div class="tour-dots" id="tourDots"></div>
+    <div>
+      <button class="tour-back" id="tourBack" onclick="prevTour()" style="display:none">Back</button>
+      <button class="tour-next" id="tourNext" onclick="nextTour()">Next</button>
+    </div>
+  </div>
+  <button class="tour-skip" onclick="endTour()" style="margin-top:12px;display:block;width:100%;text-align:center">Skip tour</button>
+</div>
+
+<script>
+const TOUR_STEPS = [
+  {
+    title: 'Select a patient',
+    body: 'Start by clicking a patient in this list. Each patient has unique allergies, medications, conditions, and lab results.',
+    target: '#patientList',
+    position: 'right',
+  },
+  {
+    title: 'Choose your role',
+    body: 'Different roles have different access permissions. Try switching between Attending Physician, Administrator, or Patient to see how access changes.',
+    target: '#userSelect',
+    position: 'right',
+  },
+  {
+    title: 'Ask questions in plain English',
+    body: 'Type any question about the selected patient. Ask about allergies, medications, lab results — or anything else. Every answer cites the exact spot in the medical record.',
+    target: '#question',
+    position: 'bottom',
+  },
+  {
+    title: 'Verify AI claims',
+    body: 'Switch to Verify mode to check whether an AI-generated claim is actually true. It will return VERIFIED, CONTRADICTED, or UNVERIFIABLE — always with citations.',
+    target: '.mode-btn:last-child',
+    position: 'left',
+  },
+  {
+    title: 'Every answer has a source',
+    body: 'Citations appear here. Each one shows the exact FHIR resource, who recorded it, when, and the relevant clinical snippet. Nothing is made up.',
+    target: '#resultContainer',
+    position: 'left',
+  },
+  {
+    title: 'Everything is audited',
+    body: 'Every question, every verification, every access is logged in a hash-chained audit trail. The chain proves nothing was tampered with. Veros remembers what was asked and what was answered.',
+    target: '#auditLog',
+    position: 'left',
+  },
+];
+
+let tourStep = 0;
+let tourActive = false;
+
+function startTour() {
+  if (localStorage.getItem('veros-tour-done')) return;
+  tourStep = 0;
+  tourActive = true;
+  showTourStep();
+}
+
+function showTourStep() {
+  if (tourStep >= TOUR_STEPS.length) { endTour(); return; }
+  const step = TOUR_STEPS[tourStep];
+  const target = document.querySelector(step.target);
+  if (!target) { nextTour(); return; }
+
+  document.getElementById('tourTitle').textContent = step.title;
+  document.getElementById('tourBody').textContent = step.body;
+  document.getElementById('tourNext').textContent = tourStep === TOUR_STEPS.length - 1 ? 'Finish' : 'Next';
+  document.getElementById('tourBack').style.display = tourStep > 0 ? 'inline-block' : 'none';
+
+  // Dots
+  const dots = TOUR_STEPS.map((_, i) => `<span class="tour-dot ${i === tourStep ? 'active' : ''}"></span>`).join('');
+  document.getElementById('tourDots').innerHTML = dots;
+
+  // Spotlight
+  const rect = target.getBoundingClientRect();
+  const spotlight = document.getElementById('tourSpotlight');
+  spotlight.style.display = 'block';
+  spotlight.style.left = (rect.left - 6) + 'px';
+  spotlight.style.top = (rect.top - 6) + 'px';
+  spotlight.style.width = (rect.width + 12) + 'px';
+  spotlight.style.height = (rect.height + 12) + 'px';
+
+  // Tooltip position
+  const tooltip = document.getElementById('tourTooltip');
+  tooltip.style.display = 'block';
+  const tw = 360, th = 200;
+  let tx, ty;
+  if (step.position === 'right') { tx = rect.right + 20; ty = rect.top; }
+  else if (step.position === 'left') { tx = rect.left - tw - 20; ty = rect.top; }
+  else if (step.position === 'bottom') { tx = rect.left; ty = rect.bottom + 20; }
+  else { tx = rect.left; ty = rect.bottom + 20; }
+  
+  tx = Math.max(20, Math.min(tx, window.innerWidth - tw - 20));
+  ty = Math.max(60, Math.min(ty, window.innerHeight - th - 20));
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top = ty + 'px';
+}
+
+function nextTour() {
+  tourStep++;
+  showTourStep();
+}
+
+function prevTour() {
+  if (tourStep > 0) { tourStep--; showTourStep(); }
+}
+
+function endTour() {
+  document.getElementById('tourSpotlight').style.display = 'none';
+  document.getElementById('tourTooltip').style.display = 'none';
+  tourActive = false;
+  localStorage.setItem('veros-tour-done', '1');
+}
+
+// Start tour on first visit after patients load
+setTimeout(startTour, 1500);
 </script>
 </body>
 </html>
