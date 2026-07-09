@@ -84,8 +84,9 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     return { success: false, error: perm.reason, audit: mkAudit(userId, userRole, userName, patientId, patientName, question, 'permission_denied', allRT, [], 0, perm.reason, Date.now() - startTime, sourceIp, false, perm.reason) };
   }
 
-  // 1. LLM interprets the question
-  const interpretation = await llmParseQuery(question);
+  // 1. LLM interprets the question (with error boundary)
+  let interpretation = null;
+  try { interpretation = await llmParseQuery(question); } catch { /* LLM unavailable, use fallback */ }
   let intentName = interpretation?.type || null;
 
   // 2. Regex fallback when LLM is unavailable (eval mode, offline)
@@ -119,14 +120,18 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     let research = [];
     if (LLM_CONFIG.enabled && intentName !== 'demographic') {
       const dataBundle = buildDataBundle(patientId, patientName);
-      const [llmAnswer, researchResults] = await Promise.all([
-        askLLM(question, dataBundle, patientName),
-        searchResearchForQuestion(question, patientId, patientName),
-      ]);
-      research = researchResults;
-      if (llmAnswer && llmAnswer.length > 10) {
-        finalAnswer = llmAnswer;
-      }
+      try {
+        const [llmAnswer, researchResults] = await Promise.allSettled([
+          askLLM(question, dataBundle, patientName),
+          searchResearchForQuestion(question, patientId, patientName),
+        ]);
+        if (llmAnswer.status === 'fulfilled' && llmAnswer.value && llmAnswer.value.length > 10) {
+          finalAnswer = llmAnswer.value;
+        }
+        if (researchResults.status === 'fulfilled') {
+          research = researchResults.value;
+        }
+      } catch { /* answer generation failed, use template */ }
     }
 
     return {
@@ -225,7 +230,8 @@ function buildDataBundle(patientId, patientName) {
 }
 
 async function askLLM(question, data, patientName) {
-  const { callLLM } = require('./llm-adapter');
+  try {
+    const { callLLM } = require('./llm-adapter');
 
   // Format data as readable text, not JSON
   let context = `Patient: ${patientName}\n`;
