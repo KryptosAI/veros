@@ -556,7 +556,8 @@ async function submitVerify() {
     if (!r.ok || !d.verdict) { document.getElementById('vError').style.display='block'; document.getElementById('vError').textContent=d.error||`Error ${r.status}`; return; }
 
     document.getElementById('vVerdict').innerHTML = `<span class="verdict verdict-${d.verdict}">${d.verdict}</span>`;
-    document.getElementById('vMeta').textContent = `Confidence: ${Math.round(d.confidence*100)}% | Policy: ${d.policy} | ${d.responseTimeMs}ms`;
+    document.getElementById('vClaimDisplay').textContent = d.reason || '';
+    document.getElementById('vMeta').textContent = `Decomposed: ${d.decomposed ? d.propositions?.length + ' claims' : 'single claim'} | ${d.responseTimeMs}ms`;
 
     const evidence = d.evidence;
     if (!evidence) return;
@@ -564,7 +565,7 @@ async function submitVerify() {
     if (all.length === 0) return;
     document.getElementById('vEvidence').style.display = 'block';
 
-    document.getElementById('vEvidenceList').innerHTML = all.map(e=>{
+    let evidenceHTML = all.map(e=>{
       const icon = e.kind==='supporting'?'✓':e.kind==='contradicting'?'✗':'?';
       return `<div class="evidence-item ${e.kind}">
         <div class="icon">${icon}</div>
@@ -575,6 +576,24 @@ async function submitVerify() {
         </div>
       </div>`;
     }).join('');
+
+    // If decomposed, show per-proposition breakdown
+    if (d.decomposed && d.propositions?.length > 1) {
+      evidenceHTML += '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><h3 style="font-size:12px;margin-bottom:8px;color:var(--muted)">Per-Claim Breakdown</h3>';
+      evidenceHTML += d.propositions.map(p => {
+        const vClass = p.verdict === 'VERIFIED' ? 'verdict-VERIFIED' : p.verdict === 'CONTRADICTED' ? 'verdict-CONTRADICTED' : 'verdict-UNVERIFIABLE';
+        return `<div class="evidence-item" style="margin-bottom:8px">
+          <div class="icon">${p.verdict === 'VERIFIED' ? '✓' : p.verdict === 'CONTRADICTED' ? '✗' : '?'}</div>
+          <div class="body">
+            <div style="font-size:12px;font-weight:500">${p.proposition || 'claim'}</div>
+            <div style="font-size:11px;margin-top:2px"><span class="verdict ${vClass}" style="font-size:10px;padding:1px 6px">${p.verdict}</span> ${p.reason || ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+      evidenceHTML += '</div>';
+    }
+
+    document.getElementById('vEvidenceList').innerHTML = evidenceHTML;
   } catch(e) {
     document.getElementById('vError').style.display='block';
     document.getElementById('vError').innerHTML = `<p>Connection failed — server may be restarting.</p><button class="retry-btn" onclick="submitVerify()">Retry</button>`;

@@ -237,7 +237,7 @@ app.post('/api/verify', authMiddleware, async (req, res) => {
   const patientName = getPatientName(patientId);
 
   const startTime = Date.now();
-  const result = verifyClaim(claim, patientId);
+  const result = await verifyClaim(claim, patientId);
   const responseTimeMs = Date.now() - startTime;
 
   const evidenceCount = (result.evidence?.supporting?.length || 0) + (result.evidence?.contradicting?.length || 0);
@@ -257,10 +257,13 @@ app.post('/api/verify', authMiddleware, async (req, res) => {
   });
 
   res.json({
-    claim: typeof claim === 'string' ? { original: claim, parsed: result.originalClaim ? null : (typeof claim) } : claim,
+    claim: typeof claim === 'string' ? { original: claim } : claim,
     verdict: result.verdict,
-    confidence: result.confidence,
-    policy: result.policy,
+    reason: result.reason || '',
+    decomposed: result.decomposed || false,
+    propositions: result.propositions || null,
+    confidence: result.confidence || 0,
+    policy: result.policy || '',
     evidence: result.evidence,
     subResults: result.subResults || null,
     responseTimeMs,
@@ -282,7 +285,7 @@ app.post('/api/verify/demo', async (req, res) => {
   const patientName = getPatientName(patientId);
 
   const startTime = Date.now();
-  const result = verifyClaim(claim, patientId);
+  const result = await verifyClaim(claim, patientId);
   const responseTimeMs = Date.now() - startTime;
 
   const evidenceCount = (result.evidence?.supporting?.length || 0) + (result.evidence?.contradicting?.length || 0);
@@ -304,12 +307,16 @@ app.post('/api/verify/demo', async (req, res) => {
   res.json({
     claim: typeof claim === 'string' ? claim : JSON.stringify(claim),
     verdict: result.verdict,
-    confidence: result.confidence,
-    policy: result.policy,
+    reason: result.reason || '',
+    decomposed: result.decomposed || false,
+    propositions: result.propositions || null,
+    confidence: result.confidence || 0,
+    policy: result.policy || '',
     evidence: result.evidence,
     subResults: result.subResults || null,
     responseTimeMs,
   });
+});
 });
 
 app.post('/api/verify/bulk', authMiddleware, async (req, res) => {
