@@ -115,6 +115,7 @@
     <div>
       <div class="mode-bar">
         <button class="mode-btn active" onclick="switchMode('query')">Ask Questions</button>
+        <button class="mode-btn" onclick="switchMode('differential')">Differential</button>
         <button class="mode-btn" onclick="switchMode('verify')">Verify AI Claims</button>
       </div>
 
@@ -126,15 +127,6 @@
           <div style="margin-top:8px">
             <button class="btn btn-primary" onclick="submitQuery()">Submit Query</button>
             <button class="btn btn-sm" onclick="document.getElementById('queryResult').style.display='none'" style="float:right">Clear</button>
-          </div>
-          <div style="margin-top:10px;padding:8px 0;border-top:1px solid var(--border)">
-            <label style="display:flex;align-items:center;cursor:pointer;font-size:12px;color:var(--text)">
-              <input type="checkbox" id="includeTrials" style="width:auto;margin-right:8px" onchange="toggleTrialDisclaimer()">
-              Search ClinicalTrials.gov for matching trials
-            </label>
-            <div id="trialDisclaimer" style="display:none;margin-top:6px;padding:8px;background:rgba(124,58,237,.06);border:1px solid var(--violet);border-radius:4px;font-size:11px;color:var(--muted);line-height:1.4">
-              This tool provides informational trial matches only — not medical advice. Matching does not guarantee eligibility. All trials require formal screening by study investigators. Participation in a clinical trial may not be standard of care. Always consult your physician.
-            </div>
           </div>
           <div style="margin-top:12px">
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Examples:
@@ -157,6 +149,33 @@
             <div id="qCitationsList"></div>
           </div>
           <div class="error-box" id="qError" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- DIFFERENTIAL MODE -->
+      <div id="differentialMode" style="display:none">
+        <div class="card">
+          <h3>Differential Diagnosis</h3>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Describe the patient's symptoms and findings. The system will generate a ranked differential based on their chart.</div>
+          <textarea id="symptoms" placeholder="62yo diabetic male with progressive blurry vision OS over 6 months, no pain, no flashes..." style="height:100px"></textarea>
+          <div style="margin-top:8px">
+            <button class="btn btn-verify" onclick="submitDifferential()">Generate Differential</button>
+            <button class="btn btn-sm" onclick="document.getElementById('diffResult').style.display='none'" style="float:right">Clear</button>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Examples:
+              <button class="btn btn-sm" onclick="document.getElementById('symptoms').value='blurry vision in one eye, gradual onset, no pain, diabetic'">Blurry vision + diabetes</button>
+              <button class="btn btn-sm" onclick="document.getElementById('symptoms').value='sudden loss of vision with floaters and flashes'">Flashes + floaters</button>
+              <button class="btn btn-sm" onclick="document.getElementById('symptoms').value='eye pain, redness, photophobia, decreased vision'">Pain + redness</button>
+            </div>
+          </div>
+        </div>
+        <div id="diffResult" style="display:none">
+          <div class="card">
+            <div id="diffSummary" style="font-size:14px;font-weight:500;margin-bottom:12px"></div>
+            <div id="diffList"></div>
+          </div>
+          <div class="error-box" id="diffError" style="display:none"></div>
         </div>
       </div>
 
@@ -277,12 +296,19 @@ function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
   if (mode === 'query') {
-    document.querySelector('.mode-btn:first-child').classList.add('active');
+    document.querySelector('.mode-btn:nth-child(1)').classList.add('active');
     document.getElementById('queryMode').style.display = 'block';
+    document.getElementById('differentialMode').style.display = 'none';
+    document.getElementById('verifyMode').style.display = 'none';
+  } else if (mode === 'differential') {
+    document.querySelector('.mode-btn:nth-child(2)').classList.add('active');
+    document.getElementById('queryMode').style.display = 'none';
+    document.getElementById('differentialMode').style.display = 'block';
     document.getElementById('verifyMode').style.display = 'none';
   } else {
-    document.querySelector('.mode-btn:last-child').classList.add('active');
+    document.querySelector('.mode-btn:nth-child(3)').classList.add('active');
     document.getElementById('queryMode').style.display = 'none';
+    document.getElementById('differentialMode').style.display = 'none';
     document.getElementById('verifyMode').style.display = 'block';
   }
 }
@@ -307,16 +333,9 @@ async function selectPatient(id, name, dob, mrn) {
 // ── Query Mode ──
 function setQuestion(t) { document.getElementById('question').value = t; }
 
-function toggleTrialDisclaimer() {
-  document.getElementById('trialDisclaimer').style.display = 
-    document.getElementById('includeTrials').checked ? 'block' : 'none';
-}
-
 async function submitQuery() {
   const q = document.getElementById('question').value.trim();
   if (!q || !selectedPatient || !selectedUser) { alert('Select patient, user, and enter a question'); return; }
-
-  const includeTrials = document.getElementById('includeTrials').checked;
 
   const c = document.getElementById('queryResult'); c.style.display = 'block';
   document.getElementById('qCitations').style.display = 'none';
@@ -333,7 +352,7 @@ async function submitQuery() {
     try {
       const r = await fetch(`${API}/api/query/demo`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({question: q, patientId: selectedPatient.id, userId: selectedUser, includeTrials}),
+        body: JSON.stringify({question: q, patientId: selectedPatient.id, userId: selectedUser}),
       });
       document.getElementById('statTime').textContent = Math.round(performance.now()-start)+'ms';
       const d = await r.json();
@@ -364,30 +383,6 @@ async function submitQuery() {
         </div>`).join('');
       document.getElementById('queryResult').appendChild(rDiv);
     }
-    if (d.trials?.length > 0) {
-      const tDiv = document.createElement('div');
-      tDiv.className = 'card';
-      tDiv.style.marginTop = '12px';
-      tDiv.innerHTML = '<h3>🔬 Clinical Trials</h3><div style="font-size:11px;color:var(--muted);margin-bottom:10px">Matching trials from ClinicalTrials.gov. This is not medical advice — consult your physician before pursuing any trial.</div>' + d.trials.map(t=>{
-        const ageOk = t.patientMatches?.age === 'matches';
-        const genderOk = t.patientMatches?.gender === 'matches';
-        const matchTags = [];
-        if (t.patientMatches?.age === 'matches') matchTags.push('<span style="color:var(--success);font-size:10px">✓ age</span>');
-        else if (t.patientMatches?.age === 'too_young' || t.patientMatches?.age === 'too_old') matchTags.push(`<span style="color:var(--danger);font-size:10px">✗ age</span>`);
-        if (t.patientMatches?.gender === 'matches') matchTags.push('<span style="color:var(--success);font-size:10px">✓ gender</span>');
-        else if (t.patientMatches?.gender === 'gender_mismatch') matchTags.push('<span style="color:var(--danger);font-size:10px">✗ gender</span>');
-        return `
-        <div class="citation" style="border-left:3px solid #0ea5e9">
-          <div class="header"><span class="type">${t.nctId}</span><span>${matchTags.join(' ')}<span style="font-size:11px;color:var(--muted);margin-left:8px">${t.status} | ${t.lastUpdated}</span></span></div>
-          <div class="display">${t.title}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${(t.phases||[]).join(', ') || 'N/A'} | ${t.conditions?.join(', ') || 'N/A'}</div>
-          ${t.minAge || t.maxAge ? `<div style="font-size:11px;color:var(--muted)">Age: ${t.minAge||'N/A'}–${t.maxAge||'N/A'} | Gender: ${t.gender||'ALL'}</div>` : ''}
-          ${t.locations?.length ? `<div style="font-size:11px;color:var(--muted)">Nearest: ${t.locations.map(l=>l.facility+' ('+l.city+', '+l.state+')').join('; ')}</div>` : ''}
-          ${t.url?`<a href="${t.url}" target="_blank" style="font-size:11px;color:var(--accent)">View on ClinicalTrials.gov →</a>`:''}
-        </div>`;
-      }).join('');
-      document.getElementById('queryResult').appendChild(tDiv);
-    }
   } catch(e) {
     if (attempts < maxAttempts) { attempts++; await new Promise(r=>setTimeout(r,800)); return tryFetch(); }
     document.getElementById('qError').style.display='block'; 
@@ -398,6 +393,50 @@ async function submitQuery() {
   }
   }
   tryFetch();
+}
+
+// ── Differential Mode ──
+async function submitDifferential() {
+  const symptoms = document.getElementById('symptoms').value.trim();
+  if (!symptoms || !selectedPatient || !selectedUser) { alert('Select patient, user, and describe the symptoms'); return; }
+
+  const c = document.getElementById('diffResult'); c.style.display = 'block';
+  document.getElementById('diffError').style.display = 'none';
+  document.getElementById('diffSummary').innerHTML = '<div style="display:flex;align-items:center"><div class="loading-spinner"></div><span class="loading-text">Generating differential...</span></div>';
+  document.getElementById('diffList').innerHTML = '';
+
+  try {
+    const r = await fetch(`${API}/api/differential/demo`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({symptoms, patientId: selectedPatient.id, userId: selectedUser})
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) { document.getElementById('diffError').style.display='block'; document.getElementById('diffError').innerHTML=`<p>${d.error||'Error '+r.status}</p><button class="retry-btn" onclick="submitDifferential()">Retry</button>`; document.getElementById('diffSummary').textContent=''; return; }
+
+    document.getElementById('diffSummary').textContent = d.summary || '';
+    const diffs = d.differentials || [];
+    document.getElementById('diffList').innerHTML = diffs.map((dx, i) => {
+      const badge = dx.likelihood === 'high' ? 'background:rgba(220,38,38,.1);color:#dc2626' : dx.likelihood === 'medium' ? 'background:rgba(217,119,6,.1);color:#d97706' : 'background:rgba(107,114,128,.1);color:#6b7280';
+      return `
+        <div class="citation" style="border-left:3px solid var(--accent);margin-bottom:10px;cursor:pointer" onclick="this.querySelector('.dx-detail').style.display=this.querySelector('.dx-detail').style.display==='none'?'block':'none'">
+          <div class="header">
+            <span style="font-weight:600">${i+1}. ${dx.diagnosis}</span>
+            <span style="font-size:10px;padding:2px 8px;border-radius:4px;${badge};margin-left:8px">${dx.likelihood || ''}</span>
+          </div>
+          <div class="dx-detail" style="display:none;margin-top:8px">
+            ${(dx.supportingEvidence||[]).length ? `<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--success);font-weight:500">✓ Supporting:</span><ul style="margin:4px 0;padding-left:16px">${dx.supportingEvidence.map(e=>`<li style="font-size:12px;color:var(--text);margin:2px 0">${e}</li>`).join('')}</ul></div>` : ''}
+            ${(dx.contradictingEvidence||[]).length ? `<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--danger);font-weight:500">✗ Contradicting:</span><ul style="margin:4px 0;padding-left:16px">${dx.contradictingEvidence.map(e=>`<li style="font-size:12px;color:var(--text);margin:2px 0">${e}</li>`).join('')}</ul></div>` : ''}
+            ${(dx.suggestedTests||[]).length ? `<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--accent);font-weight:500">🔬 Suggested Tests:</span><ul style="margin:4px 0;padding-left:16px">${dx.suggestedTests.map(t=>`<li style="font-size:12px;color:var(--text);margin:2px 0">${t}</li>`).join('')}</ul></div>` : ''}
+            ${(dx.suggestedQuestions||[]).length ? `<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--violet);font-weight:500">💬 Questions to Ask:</span><ul style="margin:4px 0;padding-left:16px">${dx.suggestedQuestions.map(q=>`<li style="font-size:12px;color:var(--text);margin:2px 0">${q}</li>`).join('')}</ul></div>` : ''}
+            <div style="font-size:10px;color:var(--muted);margin-top:6px">Click to collapse</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('diffError').style.display='block';
+    document.getElementById('diffError').innerHTML = `<p>Connection failed.</p><button class="retry-btn" onclick="submitDifferential()">Retry</button>`;
+    document.getElementById('diffSummary').textContent = '';
+  }
 }
 
 // ── Verify Mode ──

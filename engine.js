@@ -3,7 +3,6 @@ const store = require('./store');
 const { parseQuery: llmParseQuery, LLM_CONFIG } = require('./llm-adapter');
 const { INTENTS, findIntent, generateCitation, generateLLMPrompt } = require('./intents');
 const { searchResearch } = require('./research');
-const { searchTrials } = require('./clinicaltrials');
 
 function validatePermissions(userId, patientId, resourceTypes) {
   const user = getUserById(userId);
@@ -74,7 +73,7 @@ function chartSummary(patientId, patientName) {
   return { text: text.trim(), citations: allCitations };
 }
 
-async function processQuery(question, patientId, userId, patientName, sourceIp, includeTrials = false) {
+async function processQuery(question, patientId, userId, patientName, sourceIp) {
   const startTime = Date.now();
   const user = getUserById(userId);
   const userRole = user ? user.role : 'unknown';
@@ -118,36 +117,27 @@ async function processQuery(question, patientId, userId, patientName, sourceIp, 
     let finalAnswer = templateAnswer.answer;
     let finalCitations = templateAnswer.citations;
 
-    // For non-demographic questions, LLM formulates answer + research + trials
+    // For non-demographic questions, LLM formulates answer + research
     let research = [];
-    let trials = [];
     if (LLM_CONFIG.enabled && intentName !== 'demographic') {
       const dataBundle = buildDataBundle(patientId, patientName);
-      const promises = [
-        askLLM(question, dataBundle, patientName),
-        searchResearchForQuestion(question, patientId, patientName),
-      ];
-      if (includeTrials) {
-        const conditions = store.searchConditions(patientId).map(c => c.code?.text).filter(Boolean);
-        const patient = store.getResource('Patient', patientId);
-        const age = patient?.birthDate ? (() => { const b = new Date(patient.birthDate); const n = new Date(); let a = n.getFullYear() - b.getFullYear(); const m = n.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--; return a; })() : null;
-        const ctx = { age, gender: patient?.gender || null };
-        promises.push(conditions.length ? searchTrials(conditions, ctx, 5) : Promise.resolve([]));
-      }
       try {
-        const results = await Promise.allSettled(promises);
-        if (results[0].status === 'fulfilled' && results[0].value && results[0].value.length > 10) {
-          finalAnswer = results[0].value;
+        const [llmAnswer, researchResults] = await Promise.allSettled([
+          askLLM(question, dataBundle, patientName),
+          searchResearchForQuestion(question, patientId, patientName),
+        ]);
+        if (llmAnswer.status === 'fulfilled' && llmAnswer.value && llmAnswer.value.length > 10) {
+          finalAnswer = llmAnswer.value;
         }
-        if (results[1].status === 'fulfilled') research = results[1].value;
-        if (results[2]?.status === 'fulfilled') trials = results[2].value;
+        if (researchResults.status === 'fulfilled') {
+          research = researchResults.value;
+        }
       } catch { /* fallback to template */ }
     }
 
     return {
       success: true, question, understanding, searched: searchedTypes,
-      answer: finalAnswer, citations: finalCitations,
-      research: research, trials: trials,
+      answer: finalAnswer, citations: finalCitations, research: research,
       hasMatch: templateAnswer.hasMatch,
       confidence: templateAnswer.confidence, policy: 'all_cited',
       permissions: perm, responseTimeMs: rt, parsedBy: 'llm',

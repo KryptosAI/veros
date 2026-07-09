@@ -10,6 +10,7 @@ const { smartConfig, handleAuthorize, handleToken, handleIntrospect, authMiddlew
 const { deidentifyResource, deidentifyBundle, DEFAULT_RULES } = require('./deidentify');
 const { validate, isValid, validateBundle: validateFHIRBundle } = require('./validate');
 const { LLM_CONFIG } = require('./llm-adapter');
+const { buildDiffContext, generateDifferentialPrompt } = require('./differential');
 
 // ─── Process-level crash protection ───────────────────
 process.on('uncaughtException', (err) => {
@@ -134,8 +135,7 @@ app.post('/api/query', authMiddleware, async (req, res) => {
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
   const patientName = getPatientName(patientId);
-  const includeTrials = req.body.includeTrials === true;
-  const result = await processQuery(question, patientId, userId, patientName, req.ip, includeTrials);
+  const result = await processQuery(question, patientId, userId, patientName, req.ip);
 
   if (result.audit) logQuery(result.audit);
 
@@ -151,7 +151,6 @@ app.post('/api/query', authMiddleware, async (req, res) => {
     answer: result.answer,
     citations: result.citations,
     research: result.research || [],
-    trials: result.trials || [],
     hasMatch: result.hasMatch,
     confidence: result.confidence,
     policy: result.policy,
@@ -163,7 +162,7 @@ app.post('/api/query', authMiddleware, async (req, res) => {
 
 // Demo mode query
 app.post('/api/query/demo', async (req, res) => {
-  const { question, patientId, userId, includeTrials } = req.body;
+  const { question, patientId, userId } = req.body;
   if (!question || !patientId || !userId) return res.status(400).json({ error: 'question, patientId, and userId are required' });
   if (typeof question !== 'string' || question.length > 2000) return res.status(400).json({ error: 'question must be a string under 2000 characters' });
 
@@ -171,7 +170,7 @@ app.post('/api/query/demo', async (req, res) => {
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
   const patientName = getPatientName(patientId);
-  const result = await processQuery(question, patientId, userId, patientName, req.ip, includeTrials === true);
+  const result = await processQuery(question, patientId, userId, patientName, req.ip);
 
   if (result.audit) logQuery(result.audit);
 
@@ -186,7 +185,6 @@ app.post('/api/query/demo', async (req, res) => {
     answer: result.answer,
     citations: result.citations,
     research: result.research || [],
-    trials: result.trials || [],
     hasMatch: result.hasMatch,
     confidence: result.confidence, policy: result.policy,
     permissions: { role: result.permissions.role, roleLabel: result.permissions.roleLabel, scopes: result.permissions.scopes },
@@ -341,6 +339,59 @@ app.post('/api/verify/bulk', authMiddleware, async (req, res) => {
 
   res.json({ ...result, responseTimeMs });
 });
+
+// ─── Differential Diagnosis ─────────────────────────────
+app.post('/api/differential/demo', async (req, res) => {
+  const { symptoms, patientId, userId } = req.body;
+  if (!symptoms || !patientId || !userId) return res.status(400).json({ error: 'symptoms, patientId, and userId are required' });
+  if (typeof symptoms !== 'string' || symptoms.length < 3) return res.status(400).json({ error: 'Please describe the symptoms (at least 3 characters)' });
+
+  const patient = store.getResource('Patient', patientId);
+  if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+  const user = require('./data').getUserById(userId);
+  const patientName = getPatientName(patientId);
+
+  const startTime = Date.now();
+  const ctx = buildDiffContext(patientId, patientName);
+  const prompt = generateDifferentialPrompt(ctx, symptoms);
+
+  let result;
+  if (LLM_CONFIG.enabled) {
+    const { callLLM } = require('./llm-adapter');
+    try {
+      const response = await callLLM(prompt);
+      result = extractJSON(response);
+    } catch { result = null; }
+  }
+
+  if (!result || !result.differentials) {
+    return res.status(503).json({ error: 'Could not generate differential. The LLM may be unavailable.' });
+  }
+
+  logQuery({
+    userId, userRole: user?.role || 'unknown', userName: user?.name || 'Unknown',
+    patientId, patientName,
+    queryText: `DIFFERENTIAL: ${symptoms}`, queryIntent: 'differential_diagnosis',
+    resourcesQueried: ['Patient', 'Condition', 'AllergyIntolerance', 'MedicationRequest', 'Observation', 'DocumentReference'],
+    resourcesReturned: result.differentials?.length || 0,
+    responseSummary: result.summary || `${result.differentials?.length || 0} differentials`,
+    citationsCount: 0,
+    authMechanism: 'demo', scopesApplied: [], sourceIp: req.ip,
+    responseTimeMs: Date.now() - startTime, success: true, purposeOfUse: 'TREATMENT',
+  });
+
+  res.json({ symptoms, patientName, ...result, responseTimeMs: Date.now() - startTime });
+});
+
+function extractJSON(text) {
+  const cleaned = text.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1) return null;
+  try { return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1)); }
+  catch { return null; }
+}
 
 // ─── Users & Roles ───────────────────────────────────────
 app.get('/api/roles', (_req, res) => {
