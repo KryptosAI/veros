@@ -119,8 +119,8 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
   // LLM first — handles any phrasing
   let resolution = null;
   const llmResult = await llmParseQuery(question);
-  if (llmResult && llmResult.query_type && llmResult.query_type !== 'unknown') {
-    resolution = { intent: llmResult.query_type, params: llmResult.parameters || {}, parsedBy: 'llm' };
+  if (llmResult && llmResult.intent && llmResult.intent !== 'unknown') {
+    resolution = { intent: llmResult.type, params: llmResult.llmRaw?.parameters || llmResult.medication ? { medication: llmResult.medication } : {}, parsedBy: 'llm' };
   }
 
   // Regex fallback if LLM couldn't handle it
