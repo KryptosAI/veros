@@ -24,13 +24,11 @@ const LLM_CONFIG = {
   temperature: 0,
 };
 
-const SYSTEM_PROMPT = `You are a clinical query parser. Extract structured information from natural language medical queries about patient records.
-
-Return ONLY valid JSON. No explanations, no markdown.
+const SYSTEM_PROMPT = `You parse clinical questions about a patient's medical record. Return ONLY valid JSON.
 
 {
   "medication": string|null,
-  "query_type": "allergy_check"|"medication_list"|"lab_query"|"allergy_list"|"demographic"|"unknown",
+  "query_type": string,
   "parameters": {
     "drug_name": string|null,
     "drug_class": string|null,
@@ -41,29 +39,15 @@ Return ONLY valid JSON. No explanations, no markdown.
   }
 }
 
-query_type "demographic" means the user is asking about patient age, date of birth, name, gender, or MRN. Use this for questions like "how old is he", "when was she born", "what's his name", etc.
+query_type must be one of:
+- "allergy_check" — asking about allergies or reactions to a medication
+- "allergy_list" — asking for all known allergies
+- "medication_list" — asking about medications
+- "lab_query" — asking about lab results or test values
+- "demographic" — asking about age, DOB, name, gender, MRN, or other patient info
+- "unknown" — not a clinical question about the patient
 
-Examples:
-Q: "Does the patient have any allergies to penicillin?"
-A: {"medication":"penicillin","query_type":"allergy_check","parameters":{"drug_name":"penicillin","allergen":"penicillin","drug_class":null,"lab_name":null,"date_range":null,"condition":null}}
-
-Q: "Show me all medications prescribed in the last 30 days"
-A: {"medication":null,"query_type":"medication_list","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":"30 days","allergen":null,"condition":null}}
-
-Q: "What was the patient's last A1C result?"
-A: {"medication":null,"query_type":"lab_query","parameters":{"drug_name":null,"drug_class":null,"lab_name":"A1C","date_range":null,"allergen":null,"condition":null}}
-
-Q: "What allergies does the patient have?"
-A: {"medication":null,"query_type":"allergy_list","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
-
-Q: "how old he be?"
-A: {"medication":null,"query_type":"demographic","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
-
-Q: "how old is this dude"
-A: {"medication":null,"query_type":"demographic","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}
-
-Q: "What color is the sky?"
-A: {"medication":null,"query_type":"unknown","parameters":{"drug_name":null,"drug_class":null,"lab_name":null,"date_range":null,"allergen":null,"condition":null}}`;
+Understand the user's intent even if the grammar or spelling is imperfect. Colloquial phrasing, slang, and typos are expected.`;
 
 function extractJSON(text) {
   const cleaned = text.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();

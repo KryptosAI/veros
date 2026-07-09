@@ -575,15 +575,20 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
     };
   }
 
-  // Regex first — covers 80%+ of queries in 0ms
-  let parsed = parseQuery(question);
+  // LLM first — handles any phrasing, poor spelling, colloquialisms
+  // Regex is the safety net if the LLM is unavailable or times out
+  let parsed = null;
+  let usedLlm = false;
 
-  // Only hit the LLM if regex couldn't match
-  if (parsed.type === 'unknown') {
-    const llmParsed = await llmParseQuery(question);
-    if (llmParsed && llmParsed.type !== 'unknown') {
-      parsed = llmParsed;
-    }
+  const llmParsed = await llmParseQuery(question);
+  if (llmParsed && llmParsed.type !== 'unknown') {
+    parsed = llmParsed;
+    usedLlm = true;
+  }
+
+  // Regex fallback only if LLM couldn't handle it
+  if (!parsed) {
+    parsed = parseQuery(question);
   }
 
   if (parsed.type === 'unknown') {
