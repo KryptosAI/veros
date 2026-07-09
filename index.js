@@ -358,9 +358,9 @@ app.post('/api/differential/demo', async (req, res) => {
 
   let result;
   if (LLM_CONFIG.enabled) {
-    const { callLLM } = require('./llm-adapter');
+    const { callLLMRaw } = require('./llm-adapter');
     try {
-      const response = await callLLM(prompt);
+      const response = await callLLMRaw(prompt);
       result = extractJSON(response);
     } catch { result = null; }
   }

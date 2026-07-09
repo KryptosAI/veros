@@ -199,13 +199,37 @@ async function parseQuery(question) {
 }
 
 async function callLLM(prompt) {
+  return callLLMRaw(prompt, true);
+}
+
+async function callLLMRaw(prompt, useSystemPrompt = false) {
   if (LLM_CONFIG.cloudProvider) {
-    return callCloud(prompt);
+    return callCloudRaw(prompt, useSystemPrompt);
   }
   if (LLM_CONFIG.provider === 'ollama') {
-    return callOllama(LLM_CONFIG.ollamaModel, prompt);
+    return callOllama(LLM_CONFIG.ollamaModel, useSystemPrompt ? SYSTEM_PROMPT + '\n\n' + prompt : prompt);
   }
   return null;
 }
 
-module.exports = { parseQuery, llmParseQuery, regexParseQuery, LLM_CONFIG, SYSTEM_PROMPT, callLLM };
+async function callCloudRaw(prompt, useSystemPrompt) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), LLM_CONFIG.timeout);
+    const messages = useSystemPrompt
+      ? [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
+    const resp = await fetch(LLM_CONFIG.cloudEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cloudKey}` },
+      body: JSON.stringify({ model: LLM_CONFIG.cloudModel, messages, temperature: LLM_CONFIG.temperature, max_tokens: 1024, stream: false }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch { return null; }
+}
+
+module.exports = { parseQuery, llmParseQuery, regexParseQuery, LLM_CONFIG, SYSTEM_PROMPT, callLLM, callLLMRaw };
