@@ -230,8 +230,7 @@ function buildDataBundle(patientId, patientName) {
 }
 
 async function askLLM(question, data, patientName) {
-  try {
-    const { callLLM } = require('./llm-adapter');
+  const { callLLM } = require('./llm-adapter');
 
   // Format data as readable text, not JSON
   let context = `Patient: ${patientName}\n`;
