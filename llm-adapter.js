@@ -215,14 +215,14 @@ async function callLLMRaw(prompt, useSystemPrompt = false) {
 async function callCloudRaw(prompt, useSystemPrompt) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), LLM_CONFIG.timeout);
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const messages = useSystemPrompt
       ? [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: prompt }]
       : [{ role: 'user', content: prompt }];
     const resp = await fetch(LLM_CONFIG.cloudEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cloudKey}` },
-      body: JSON.stringify({ model: LLM_CONFIG.cloudModel, messages, temperature: LLM_CONFIG.temperature, max_tokens: 1024, stream: false }),
+      body: JSON.stringify({ model: LLM_CONFIG.cloudModel, messages, temperature: LLM_CONFIG.temperature, max_tokens: 2048, stream: false }),
       signal: controller.signal,
     });
     clearTimeout(timeout);

@@ -358,11 +358,14 @@ app.post('/api/differential/demo', async (req, res) => {
 
   let result;
   if (LLM_CONFIG.enabled) {
-    const { callLLMRaw } = require('./llm-adapter');
+    const { callLLMRaw, LLM_CONFIG: llmCfg } = require('./llm-adapter');
     try {
       const response = await callLLMRaw(prompt);
       result = extractJSON(response);
-    } catch { result = null; }
+    } catch (e) {
+      console.error('Differential LLM error:', e.message);
+      result = null;
+    }
   }
 
   if (!result || !result.differentials) {
