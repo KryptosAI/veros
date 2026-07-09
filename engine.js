@@ -67,6 +67,16 @@ const LAB_QUERY_PATTERNS = [
   /what\s+(?:labs?|results?)\s+(?:are|is|were)\s+(?:abnormal|out\s+of\s+range)/i,
 ];
 
+const DEMOGRAPHIC_PATTERNS = [
+  /how\s+old\s+(?:is|are)\s*(?:he|she|they|the\s+patient|this\s+patient|the\s+pt|pt)?\s*\??/i,
+  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?(?:age|birth\s*date|dob|birthday|date\s+of\s+birth)\s*\??/i,
+  /when\s+was\s+(?:he|she|they|the\s+patient|this\s+patient)\s+born\??/i,
+  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?name\s*\??/i,
+  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?(?:gender|sex)\s*\??/i,
+  /(?:is\s+)?(?:he|she|the\s+patient|this\s+patient)\s+(?:male|female)\??/i,
+  /(?:what\s+(?:is|are)\s+)?(?:his|her|their|the\s+patient'?s?|pt'?s?\s+)?MRN\s*\??/i,
+];
+
 function parseQuery(question) {
   const q = question.trim();
 
@@ -87,6 +97,10 @@ function parseQuery(question) {
 
   for (const pattern of LAB_QUERY_PATTERNS) {
     if (pattern.test(q)) return { type: 'abnormal_labs', intent: 'Find abnormal lab results' };
+  }
+
+  for (const pattern of DEMOGRAPHIC_PATTERNS) {
+    if (pattern.test(q)) return { type: 'demographic', intent: 'Patient demographic information' };
   }
 
   return { type: 'unknown', intent: 'Unrecognized query pattern' };
@@ -140,7 +154,71 @@ function searchFHIR(patientId, parsedQuery) {
     return { type: 'abnormal_labs', observations: abnormal, allObservations: allObs };
   }
 
+  if (parsedQuery.type === 'demographic') {
+    return { type: 'demographic', patient: store.getResource('Patient', patientId) };
+  }
+
   return { type: 'unknown' };
+}
+
+function calculateAge(birthDate) {
+  const birth = new Date(birthDate);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+function buildDemographicAnswer(question, patientName, patientResource) {
+  const citations = [];
+  if (patientResource) citations.push(generateCitation(patientResource));
+
+  if (!patientResource) {
+    return { answer: `Could not find ${patientName}'s record.`, citations: [], hasMatch: false, confidence: 'no_data' };
+  }
+
+  const lower = question.toLowerCase();
+
+  if (/how\s+old|age|born|birth|dob/i.test(lower)) {
+    const dob = patientResource.birthDate;
+    if (!dob) return { answer: `${patientName}'s date of birth is not recorded.`, citations, hasMatch: false, confidence: 'no_data' };
+    const age = calculateAge(dob);
+    if (/when|born\s|birth\s|dob/i.test(lower) && !/how\s+old|what.*age/i.test(lower)) {
+      return { answer: `${patientName} was born on ${dob} (age ${age}).`, citations, hasMatch: true, confidence: 'confirmed' };
+    }
+    return { answer: `${patientName} is ${age} years old, based on date of birth ${dob}.`, citations, hasMatch: true, confidence: 'confirmed' };
+  }
+
+  if (/name|who\s+(?:is|are)/i.test(lower)) {
+    const name = (patientResource.name?.[0]?.given || []).join(' ') + ' ' + (patientResource.name?.[0]?.family || '');
+    return {
+      answer: `The patient's name is ${name.trim()}.`,
+      citations, hasMatch: true, confidence: 'confirmed',
+    };
+  }
+
+  if (/gender|sex|male|female/i.test(lower)) {
+    const gender = patientResource.gender || 'not recorded';
+    return {
+      answer: `${patientName} is ${gender}.`,
+      citations, hasMatch: true, confidence: 'confirmed',
+    };
+  }
+
+  if (/mrn/i.test(lower)) {
+    const mrn = patientResource.identifier?.[0]?.value || 'not recorded';
+    return { answer: `${patientName}'s MRN is ${mrn}.`, citations, hasMatch: true, confidence: 'confirmed' };
+  }
+
+  const dob = patientResource.birthDate;
+  const age = dob ? calculateAge(dob) : 'unknown';
+  const gender = patientResource.gender || 'not recorded';
+  const mrn = patientResource.identifier?.[0]?.value || 'not recorded';
+  return {
+    answer: `${patientName} — ${gender}, ${dob ? age + ' years old (DOB: ' + dob + ')' : 'age unknown'}, MRN: ${mrn}.`,
+    citations, hasMatch: true, confidence: 'confirmed',
+  };
 }
 
 function extractKeywords(question) {
@@ -308,6 +386,12 @@ function generateCitation(resource) {
     date = resource.effectiveDateTime || resource.issued || '';
     snippet = resource.valueQuantity ? `${resource.valueQuantity.value} ${resource.valueQuantity.unit || ''}` : (resource.valueString || '');
     category = 'laboratory';
+  } else if (type === 'Patient') {
+    const name = (resource.name?.[0]?.given || []).join(' ') + ' ' + (resource.name?.[0]?.family || '');
+    display = name.trim() || 'Unknown patient';
+    date = resource.birthDate || '';
+    snippet = `DOB: ${resource.birthDate || 'N/A'}, Gender: ${resource.gender || 'N/A'}, MRN: ${resource.identifier?.[0]?.value || 'N/A'}`;
+    category = 'demographics';
   } else {
     display = `${type}/${id}`;
     date = resource.meta?.lastUpdated || '';
@@ -537,6 +621,9 @@ async function processQuery(question, patientId, userId, patientName, sourceIp) 
       break;
     case 'abnormal_labs':
       answer = buildAbnormalLabsAnswer(patientName, searchResult);
+      break;
+    case 'demographic':
+      answer = buildDemographicAnswer(question, patientName, searchResult.patient);
       break;
     default:
       return {
