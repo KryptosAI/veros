@@ -27,31 +27,6 @@ const LLM_CONFIG = {
   temperature: 0,
 };
 
-const SYSTEM_PROMPT = `You parse clinical questions about a patient's medical record. Return ONLY valid JSON.
-
-{
-  "medication": string|null,
-  "query_type": string,
-  "parameters": {
-    "drug_name": string|null,
-    "drug_class": string|null,
-    "lab_name": string|null,
-    "date_range": string|null,
-    "allergen": string|null,
-    "condition": string|null
-  }
-}
-
-query_type must be one of:
-- "allergy_check" — asking about allergies or reactions to a medication
-- "allergy_list" — asking for all known allergies
-- "medication_list" — asking about medications
-- "lab_query" — asking about lab results or test values
-- "demographic" — asking about age, DOB, name, gender, MRN, or other patient info
-- "unknown" — not a clinical question about the patient
-
-Understand the user's intent even if the grammar or spelling is imperfect. Colloquial phrasing, slang, and typos are expected.`;
-
 function extractJSON(text) {
   const cleaned = text.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
   const firstBrace = cleaned.indexOf('{');
