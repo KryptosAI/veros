@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const store = require('./store');
 const { seedDatabase, getUsers, MEDICATION_CLASSES, ROLES } = require('./data');
 const { processQuery } = require('./engine');
@@ -10,6 +11,17 @@ const { deidentifyResource, deidentifyBundle, DEFAULT_RULES } = require('./deide
 const { validate, isValid, validateBundle: validateFHIRBundle } = require('./validate');
 const { LLM_CONFIG } = require('./llm-adapter');
 
+// ─── Process-level crash protection ───────────────────
+process.on('uncaughtException', (err) => {
+  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} FATAL: ${err.message}\n${err.stack}\n\n`);
+  console.error('FATAL:', err.message);
+  if (err.code === 'EADDRINUSE') process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} REJECTION: ${reason}\n\n`);
+  console.error('REJECTION:', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3100;
 
@@ -17,6 +29,17 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.disable('x-powered-by');
+
+// Request timeout — never let a request hang longer than 30s
+app.use((req, res, next) => {
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: 'Request timed out' });
+    }
+  }, 30000);
+  res.on('finish', () => clearTimeout(timer));
+  next();
+});
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -508,16 +531,21 @@ app.listen(PORT, () => {
     ? `LLM: ${LLM_CONFIG.cloudProvider} (${LLM_CONFIG.cloudModel})`
     : LLM_CONFIG.provider === 'ollama'
       ? `LLM: Ollama (${LLM_CONFIG.ollamaModel})`
-      : 'LLM: disabled (set DEEPSEEK_API_KEY or OPENAI_API_KEY)';
+      : 'LLM: disabled (set DEEPSEEK_API_KEY)';
 
-  console.log(`\nVeros v0.3 — Clinical Ground Truth for AI`);
-  console.log(`  Patients: ${store.patientCount()} | Total FHIR resources: ${Object.values(counts).reduce((a, b) => a + b, 0)}`);
-  console.log(`  ${llmNote}`);
-  console.log(`  Query:   POST /api/query        — Ask questions, get cited answers`);
-  console.log(`  Verify:  POST /api/verify       — Verify AI claims against FHIR truth`);
-  console.log(`  Bulk:    POST /api/verify/bulk  — Verify multiple claims at once`);
-  console.log(`  SMART:   http://localhost:${PORT}/.well-known/smart-configuration`);
-  console.log(`  UI:      http://localhost:${PORT}\n`);
+  const msg = [
+    `\nVeros v0.3 — Clinical Ground Truth for AI`,
+    `  Patients: ${store.patientCount()} | Total FHIR resources: ${Object.values(counts).reduce((a, b) => a + b, 0)}`,
+    `  ${llmNote}`,
+    `  Query:   POST /api/query        — Ask questions, get cited answers`,
+    `  Verify:  POST /api/verify       — Verify AI claims against FHIR truth`,
+    `  Bulk:    POST /api/verify/bulk  — Verify multiple claims at once`,
+    `  SMART:   http://localhost:${PORT}/.well-known/smart-configuration`,
+    `  UI:      http://localhost:${PORT}\n`
+  ].join('\n');
+
+  console.log(msg);
+  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} START\n${msg}\n`);
 });
 
 module.exports = app;
