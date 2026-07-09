@@ -1,11 +1,14 @@
+const { generateLLMPrompt } = require('./intents');
+
 const deepseekKey = process.env.DEEPSEEK_API_KEY || null;
 const openaiKey = process.env.OPENAI_API_KEY || null;
 const cloudKey = deepseekKey || openaiKey;
 
+const SYSTEM_PROMPT = generateLLMPrompt();
+
 const LLM_CONFIG = {
   deepseekKey,
   openaiKey,
-
   cloudProvider: deepseekKey ? 'deepseek' : (openaiKey ? 'openai' : null),
   cloudEndpoint: deepseekKey
     ? 'https://api.deepseek.com/v1/chat/completions'
