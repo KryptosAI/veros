@@ -14,6 +14,33 @@ function loadChainHead() {
   d.exec(`CREATE TABLE IF NOT EXISTS audit_chain_meta (key TEXT PRIMARY KEY, value TEXT)`);
   const row = d.prepare('SELECT value FROM audit_chain_meta WHERE key = ?').get('chain_head');
   chainHead = row ? row.value : GENESIS_HASH;
+
+  // If the DB was reset but old audit entries exist, clear the orphans
+  if (chainHead === GENESIS_HASH && fs.existsSync(LOG_PATH)) {
+    const lines = fs.readFileSync(LOG_PATH, 'utf-8').trim().split('\n').filter(Boolean);
+    if (lines.length > 0) {
+      const lastEntry = JSON.parse(lines[lines.length - 1]);
+      if (lastEntry.hash !== GENESIS_HASH) {
+        // DB was reset — rebuild chain_head from file
+        let prev = GENESIS_HASH;
+        let valid = true;
+        for (const line of lines) {
+          const e = JSON.parse(line);
+          if (e.prev_hash !== prev) { valid = false; break; }
+          prev = e.hash;
+        }
+        if (valid) {
+          chainHead = prev;
+          d.prepare('INSERT OR REPLACE INTO audit_chain_meta (key, value) VALUES (?, ?)').run('chain_head', chainHead);
+        } else {
+          // Chain is broken — start fresh
+          fs.unlinkSync(LOG_PATH);
+          chainHead = GENESIS_HASH;
+        }
+      }
+    }
+  }
+
   return chainHead;
 }
 
