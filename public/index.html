@@ -305,23 +305,27 @@ async function submitQuery() {
   const c = document.getElementById('queryResult'); c.style.display = 'block';
   document.getElementById('qCitations').style.display = 'none';
   document.getElementById('qError').style.display = 'none';
-  document.getElementById('qAnswer').textContent = 'Processing...';
+  document.getElementById('qAnswer').innerHTML = '<div style="display:flex;align-items:center;padding:8px 0"><div class="loading-spinner"></div><span class="loading-text">Searching chart...</span></div>';
   document.getElementById('qPolicy').textContent = '';
   document.getElementById('qMeta').textContent = '';
 
   const start = performance.now();
-  try {
-    const r = await fetch(`${API}/api/query/demo`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({question: q, patientId: selectedPatient.id, userId: selectedUser})
-    });
-    document.getElementById('statTime').textContent = Math.round(performance.now()-start)+'ms';
-    const d = await r.json();
-    if (!r.ok || d.error) { document.getElementById('qError').style.display='block'; document.getElementById('qError').textContent=d.error||`Error ${r.status}`; return; }
-    document.getElementById('qAnswer').textContent = d.answer;
-    document.getElementById('qPolicy').textContent = d.policy==='all_cited'?'✓ ALL CLAIMS CITED':d.policy==='negative_findings'?'○ NEGATIVE FINDINGS':d.policy==='no_source_no_answer'?'⊘ NO SOURCE, NO ANSWER':'';
-    document.getElementById('qMeta').textContent = `Confidence: ${d.confidence} | Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms`;
-    if (d.citations?.length > 0) {
+  let attempts = 0;
+  const maxAttempts = 2;
+  
+  async function tryFetch() {
+    try {
+      const r = await fetch(`${API}/api/query/demo`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({question: q, patientId: selectedPatient.id, userId: selectedUser})
+      });
+      document.getElementById('statTime').textContent = Math.round(performance.now()-start)+'ms';
+      const d = await r.json();
+      if (!r.ok || d.error) { document.getElementById('qError').style.display='block'; document.getElementById('qError').innerHTML=`<p>${d.error||'Error '+r.status}</p><button class="retry-btn" onclick="submitQuery()">Retry</button>`; document.getElementById('qAnswer').textContent=''; return; }
+      document.getElementById('qAnswer').textContent = d.answer;
+      document.getElementById('qPolicy').textContent = d.policy==='all_cited'?'✓ ALL CLAIMS CITED':d.policy==='negative_findings'?'○ NEGATIVE FINDINGS':d.policy==='no_source_no_answer'?'⊘ NO SOURCE, NO ANSWER':'';
+      document.getElementById('qMeta').textContent = `Confidence: ${d.confidence} | Role: ${d.permissions?.roleLabel} | ${d.responseTimeMs}ms | via ${d.parsedBy||'rule'}`;
+      if (d.citations?.length > 0) {
       document.getElementById('qCitations').style.display = 'block';
       document.getElementById('qCitationsList').innerHTML = d.citations.map(c=>`
         <div class="citation">
@@ -331,7 +335,16 @@ async function submitQuery() {
           <div class="author">By: ${c.author||'Unknown'} | FHIR: ${c.fhirReference}</div>
         </div>`).join('');
     }
-  } catch(e) { document.getElementById('qError').style.display='block'; document.getElementById('qError').textContent=e.message; }
+  } catch(e) {
+    if (attempts < maxAttempts) { attempts++; await new Promise(r=>setTimeout(r,800)); return tryFetch(); }
+    document.getElementById('qError').style.display='block'; 
+    document.getElementById('qAnswer').textContent='';
+    document.getElementById('qError').innerHTML = `<p>Connection failed — server may be restarting.</p><button class="retry-btn" onclick="submitQuery()">Retry</button>`;
+    document.getElementById('qPolicy').textContent = '';
+    document.getElementById('qMeta').textContent = '';
+  }
+  }
+  tryFetch();
 }
 
 // ── Verify Mode ──
@@ -436,7 +449,7 @@ async function submitVerify() {
   const c = document.getElementById('verifyResult'); c.style.display = 'block';
   document.getElementById('vEvidence').style.display = 'none';
   document.getElementById('vError').style.display = 'none';
-  document.getElementById('vVerdict').innerHTML = '<span style="color:var(--muted)">Verifying...</span>';
+  document.getElementById('vVerdict').innerHTML = '<div style="display:flex;align-items:center"><div class="loading-spinner"></div><span class="loading-text">Verifying claim...</span></div>';
   document.getElementById('vClaimDisplay').textContent = typeof claim === 'string' ? `"${claim}"` : JSON.stringify(claim);
   document.getElementById('vMeta').textContent = '';
 
@@ -470,7 +483,11 @@ async function submitVerify() {
         </div>
       </div>`;
     }).join('');
-  } catch(e) { document.getElementById('vError').style.display='block'; document.getElementById('vError').textContent=e.message; }
+  } catch(e) {
+    document.getElementById('vError').style.display='block';
+    document.getElementById('vError').innerHTML = `<p>Connection failed — server may be restarting.</p><button class="retry-btn" onclick="submitVerify()">Retry</button>`;
+    document.getElementById('vVerdict').innerHTML = '';
+  }
 }
 
 async function loadAudit() {
