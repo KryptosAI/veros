@@ -48,6 +48,7 @@ function keywordSearch(patientId, keywords) {
   for (const r of store.searchConditions(patientId)) { const s = match(JSON.stringify(r).toLowerCase()); if (s > 0) results.push({ ...r, _score: s, _type: 'condition' }); }
   for (const r of store.searchAllMedications(patientId)) { const s = match(JSON.stringify(r).toLowerCase()); if (s > 0) results.push({ ...r, _score: s, _type: 'medication' }); }
   for (const r of store.searchObservations(patientId)) { const s = match(JSON.stringify(r).toLowerCase()); if (s > 0) results.push({ ...r, _score: s, _type: 'observation' }); }
+  for (const r of store.searchByPatient('DocumentReference', patientId)) { const s = match(JSON.stringify(r).toLowerCase()); if (s > 0) results.push({ ...r, _score: s, _type: 'note' }); }
 
   return results.sort((a, b) => b._score - a._score);
 }
@@ -172,6 +173,7 @@ async function processQuery(question, patientId, userId, patientName, sourceIp, 
         if (t === 'condition') return i.code?.text;
         if (t === 'medication') return i.medicationCodeableConcept?.text;
         if (t === 'observation') return `${i.code?.text}: ${i.valueQuantity?.value || i.valueString}`;
+        if (t === 'note') return (i.content?.[0]?.attachment?.title || i.type?.text || 'clinical note');
         return '';
       }).filter(Boolean).join(', ')}. `;
     }
@@ -236,6 +238,12 @@ function buildDataBundle(patientId, patientName) {
     allergies: store.searchAllAllergies(patientId).map(a => ({ substance: a.code?.text || a.code?.coding?.[0]?.display || 'Unknown', criticality: a.criticality || 'unknown', status: a.clinicalStatus?.coding?.[0]?.code || 'unknown', reaction: a.reaction?.[0]?.manifestation?.[0]?.text || '' })),
     medications: store.searchAllMedications(patientId).map(m => ({ name: m.medicationCodeableConcept?.text || m.medicationCodeableConcept?.coding?.[0]?.display || 'Unknown', status: m.status || 'unknown', instructions: m.dosageInstruction?.[0]?.text || '' })),
     observations: store.searchObservations(patientId).map(o => ({ name: o.code?.text || o.code?.coding?.[0]?.display || 'Unknown', value: o.valueQuantity?.value ?? o.valueString ?? 'N/A', unit: o.valueQuantity?.unit || '', date: o.effectiveDateTime || '' })).slice(0, 15),
+    notes: store.searchByPatient('DocumentReference', patientId).map(n => ({
+      title: n.content?.[0]?.attachment?.title || n.type?.text || 'Clinical Note',
+      date: n.date || '',
+      author: (n.author || []).map(a => a.display).filter(Boolean).join(', '),
+      text: (n.content?.[0]?.attachment?.data || '').substring(0, 500),
+    })),
   };
 }
 
@@ -270,6 +278,13 @@ async function askLLM(question, data, patientName) {
     context += `Lab Results:\n`;
     for (const o of data.observations) {
       context += `  ${o.name}: ${o.value}${o.unit ? ' ' + o.unit : ''} (${o.date})\n`;
+    }
+  }
+
+  if (data.notes?.length) {
+    context += `Clinical Notes:\n`;
+    for (const n of data.notes.slice(0, 3)) {
+      context += `  [${n.date}] ${n.title} by ${n.author || 'unknown'}\n    ${n.text}\n`;
     }
   }
 

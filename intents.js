@@ -322,6 +322,12 @@ function generateCitation(resource) {
     date = resource.birthDate || '';
     snippet = `DOB: ${resource.birthDate || 'N/A'}, Gender: ${resource.gender || 'N/A'}, MRN: ${resource.identifier?.[0]?.value || 'N/A'}`;
     category = 'demographics';
+  } else if (type === 'DocumentReference') {
+    display = resource.content?.[0]?.attachment?.title || resource.type?.text || 'Clinical Note';
+    date = resource.date || '';
+    author = (resource.author || []).map(a => a.display).filter(Boolean).join(', ');
+    snippet = (resource.content?.[0]?.attachment?.data || '').substring(0, 200);
+    category = 'clinical_note';
   } else {
     display = `${type}/${id}`;
     date = resource.meta?.lastUpdated || '';
