@@ -26,6 +26,8 @@ process.on('unhandledRejection', (reason) => {
 const app = express();
 const PORT = process.env.PORT || 3100;
 
+// Wrap async route handlers to catch promise rejections
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -592,6 +594,9 @@ app.post('/auth/introspect', handleIntrospect);
 app.use((err, req, res, _next) => {
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Request body too large. Maximum is 1MB.' });
   if (err.status === 413) return res.status(413).json({ error: 'Request body too large.' });
+  const fs = require('fs');
+  const path = require('path');
+  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} ERROR: ${err.message}\n${err.stack}\n\n`);
   console.error('Server error:', err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
