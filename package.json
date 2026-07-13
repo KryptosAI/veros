@@ -1,6 +1,6 @@
 {
   "name": "@kryptosai/veros",
-  "version": "1.3.1",
+  "version": "1.3.3",
   "description": "Open-source validation layer for clinical AI. Fact-checks AI claims against FHIR patient records with citations.",
   "main": "index.js",
   "homepage": "https://github.com/KryptosAI/veros#readme",
