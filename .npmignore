@@ -1,0 +1,10 @@
+server.log
+audit.jsonl
+*.db
+*.db-shm
+*.db-wal
+outreach/
+scripts/
+.env.example
+Dockerfile
+docker-compose.yml

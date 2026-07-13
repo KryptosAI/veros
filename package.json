@@ -1,7 +1,7 @@
 {
-  "name": "veros",
-  "version": "0.3.0",
-  "description": "Veros — clinical ground truth for AI. Verify AI-generated claims against FHIR source records with citations, permissions, and audit.",
+  "name": "@kryptosai/veros",
+  "version": "1.3.0",
+  "description": "Veros \u2014 clinical ground truth for AI. Verify AI-generated claims against FHIR source records with citations, permissions, and audit.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
