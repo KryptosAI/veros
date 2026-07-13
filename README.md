@@ -3,81 +3,110 @@
 </p>
 
 <p align="center">
-  <strong>Every AI system that touches clinical data makes mistakes.<br>Veros catches them before they reach a patient.</strong>
+  <strong>Plug into any EHR. Ask questions in plain English. Get cited answers from the chart.<br>Every AI claim gets fact-checked before it reaches a clinician.</strong>
 </p>
 
 ---
 
-Plug it into any FHIR-compatible EHR. Every AI-generated clinical claim gets fact-checked against the actual patient chart — with citations, audit logs, and role-based access controls. If the chart doesn't back it up, Veros calls it out.
+## Quick demo
 
-### The problem
+```bash
+git clone https://github.com/KryptosAI/veros.git && cd veros && npm install && npm start
+# → http://localhost:3100 (4 synthetic ophthalmology patients pre-loaded)
+```
 
-LLMs are showing up in every EHR. Epic, Oracle, and a dozen startups are embedding AI that writes clinical notes, suggests diagnoses, and summarizes charts. These models hallucinate. In a clinical setting, a hallucinated allergy or a fabricated lab value isn't a typo — it's dangerous. And right now, no one is checking whether these claims are actually true for the specific patient.
+```bash
+# Ask a question
+curl -X POST localhost:3100/api/query/demo \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"is this patient allergic to penicillin","patientId":"patient-002","userId":"user-dr-nguyen"}'
+```
 
-### What Veros does
+```json
+{
+  "understanding": "Checking for allergies or adverse reactions",
+  "answer": "YES — Maria E Santos has a documented Penicillin. HIGH RISK. Anaphylaxis with respiratory distress in 1990.",
+  "citations": [{
+    "sourceType": "AllergyIntolerance",
+    "sourceId": "allergy-002",
+    "display": "Penicillin — HIGH RISK (Confirmed)",
+    "snippet": "Anaphylaxis with respiratory distress — avoid penicillin-class antibiotics."
+  }],
+  "policy": "all_cited"
+}
+```
 
-Veros is a validation layer that sits between any AI system and the patient's FHIR record. You submit a claim. It opens the chart. It tells you whether the record backs it up, contradicts it, or has no data either way.
+```bash
+# Verify an AI claim — decomposes compound claims into atomic propositions
+curl -X POST localhost:3100/api/verify/demo \
+  -H 'Content-Type: application/json' \
+  -d '{"claim":"Patient has diabetic retinopathy, is on metformin, and is allergic to penicillin","patientId":"patient-001","userId":"user-dr-chen"}'
+```
 
-| Verdict | What it means |
-|---|---|
-| **VERIFIED** | The chart confirms this. Here's the exact FHIR source. |
-| **CONTRADICTED** | The chart says the opposite. Here's the conflicting record. |
-| **UNVERIFIABLE** | No data either way. Refusing to guess. |
+```json
+{
+  "verdict": "PARTIALLY_VERIFIED",
+  "reason": "2 verified, 0 contradicted, 1 unverifiable.",
+  "decomposed": true,
+  "propositions": [
+    { "proposition": "Patient has diabetic retinopathy", "verdict": "VERIFIED", "reason": "Confirmed: 'Diabetic Retinopathy — Proliferative, Both Eyes' is documented (active)." },
+    { "proposition": "is on metformin", "verdict": "VERIFIED", "reason": "Confirmed: Metformin 1000mg — active (order)." },
+    { "proposition": "is allergic to penicillin", "verdict": "UNVERIFIABLE", "reason": "No allergy or medication history found for penicillin." }
+  ]
+}
+```
 
-### How it works
+```bash
+# Generate a differential diagnosis
+curl -X POST localhost:3100/api/differential/demo \
+  -H 'Content-Type: application/json' \
+  -d '{"symptoms":"62yo diabetic with progressive blurry vision OS x6mo, no pain, no flashes","patientId":"patient-001","userId":"user-dr-chen"}'
+```
+
+| Rank | Diagnosis | Likelihood | Supporting |
+|---|---|---|---|
+| 1 | Diabetic Macular Edema Progression | high | HbA1c 8.2%, PDR, anti-VEGF therapy |
+| 2 | Vitreous Hemorrhage | medium | PDR both eyes |
+| 3 | Cataract | medium | Age 62, diabetic |
+| 4 | Tractional Retinal Detachment | low | PDR both eyes |
+| 5 | NAION | low | Age 62, hypertension |
+
+Each diagnosis includes suggested tests to order and questions to ask the patient.
+
+## What it does
+
+AI systems are being embedded in every EHR. They write notes, suggest diagnoses, summarize charts. They also hallucinate. A fabricated allergy or a wrong medication in a clinical note isn't a typo — it's dangerous. Veros is a validation layer: submit a claim, and it checks whether the actual patient record backs it up, contradicts it, or has no data either way.
 
 <p align="center">
   <img src="public/veros-architecture.png" alt="Architecture" width="700">
 </p>
 
-1. **Any AI system** makes a claim about a patient (e.g., "Patient is allergic to penicillin")
-2. **Veros decomposes** the claim into atomic propositions and searches the FHIR chart for each one
-3. **Returns a verdict** — verified, contradicted, or unverifiable — with the exact source record cited
+## Features
 
-### The product
-
-Three modes, one API:
-
-| Mode | What you do | What you get |
+| | | |
 |---|---|---|
-| **Query** | Ask anything about a patient in plain English | Cited answers from the chart |
-| **Differential** | Describe symptoms | Ranked differential with evidence, suggested tests, questions to ask |
-| **Verify** | Submit an AI-generated claim | VERIFIED / CONTRADICTED / UNVERIFIABLE with FHIR citations |
+| 🗣 **Plain English queries** | 📋 **Cited FHIR sources** | 🔍 **AI claim verification** |
+| Ask anything about a patient. LLM interprets intent, searches FHIR, answers with citations. | Every answer links to the exact chart source — resource type, ID, author, date, clinical snippet. | Submit a claim. Get VERIFIED, CONTRADICTED, or UNVERIFIABLE with per-proposition evidence. |
+| 🩺 **Differential diagnosis** | 🔒 **RBAC + audit trail** | 🏥 **FHIR-native · SMART auth** |
+| Describe symptoms. Get ranked differential with supporting/contradicting evidence, suggested tests, patient questions. | 9 clinical roles. Per-resource access. Hash-chained tamper-evident audit log. | Speaks FHIR R4. Authenticates via SMART on FHIR. Works with Epic, Oracle, Medplum, OpenEMR, or anything with a FHIR API. |
 
-### FHIR-native. EHR-agnostic.
-
-Veros speaks FHIR R4 and authenticates via SMART on FHIR. It doesn't replace your EHR — it sits alongside it. Works with Epic, Oracle, Medplum, OpenEMR, OpenMRS, or anything with a FHIR API.
-
-### Built for production
-
-- **Audit trail** — every query, every verification, every access is logged in a hash-chained tamper-evident log
-- **RBAC** — 9 clinical roles with per-resource access controls. Admin can't see allergies. Patients can only see their own data.
-- **Deidentification** — FHIR-path aware PHI redaction and crypto-hashing for research exports
-- **LLM-powered** — any natural language question works. Falls back to deterministic rules when offline.
-
-### Quick start
+## Install
 
 ```bash
 git clone https://github.com/KryptosAI/veros.git
-cd veros
-npm install
+cd veros && npm install
 npm start          # → http://localhost:3100
 npm run eval       # 27 unit tests
+npm run benchmark  # citation precision/recall
 ```
 
-To enable natural language understanding (otherwise uses deterministic regex):
+Enable natural language understanding (otherwise falls back to deterministic regex):
 
 ```bash
 export DEEPSEEK_API_KEY="sk-your-key"
-# or
-export OPENAI_API_KEY="sk-your-key"
 npm start
 ```
 
-### License
+## License
 
-Open core. The verification engine, citation system, audit logging, RBAC, and FHIR layer are open source under MIT.
-
----
-
-*Inspired by Stanford's VeriFact (NEJM AI, 2025). Built independently.*
+MIT
