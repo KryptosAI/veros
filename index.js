@@ -16,11 +16,16 @@ const { buildDiffContext, generateDifferentialPrompt } = require('./differential
 process.on('uncaughtException', (err) => {
   fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} FATAL: ${err.message}\n${err.stack}\n\n`);
   console.error('FATAL:', err.message);
+  if (err.code === 'SQLITE_IOERR' || err.code === 'SQLITE_IOERR_SHORT_READ') {
+    // Database corrupted — let the restart wrapper clean it up
+    process.exit(1);
+  }
   if (err.code === 'EADDRINUSE') process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} REJECTION: ${reason}\n\n`);
-  console.error('REJECTION:', reason);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} REJECTION: ${msg}\n${reason instanceof Error ? reason.stack : ''}\n\n`);
+  console.error('REJECTION:', msg);
 });
 
 const app = express();

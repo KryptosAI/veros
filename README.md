@@ -93,6 +93,9 @@ AI systems are being embedded in every EHR. They write notes, suggest diagnoses,
 ## Install
 
 ```bash
+npm install @kryptosai/veros
+```
+```bash
 git clone https://github.com/KryptosAI/veros.git
 cd veros && npm install
 npm start          # → http://localhost:3100
@@ -107,6 +110,8 @@ export DEEPSEEK_API_KEY="sk-your-key"
 npm start
 ```
 
+Open source under MIT. PRs and issues welcome on [GitHub](https://github.com/KryptosAI/veros/issues).
+
 ## License
 
-MIT
+MIT © KryptosAI
