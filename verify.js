@@ -372,8 +372,8 @@ async function verifyClaim(claim, patientId) {
   return { ...result, decomposed: false };
 }
 
-function verifyClaims(claims, patientId) {
-  const results = claims.map(c => verifyClaim(c, patientId));
+async function verifyClaims(claims, patientId) {
+  const results = await Promise.all(claims.map(c => verifyClaim(c, patientId)));
   return {
     summary: {
       total: results.length,

@@ -29,7 +29,10 @@
     "dev": "node index.js",
     "eval": "node eval.js",
     "benchmark": "node benchmark.js",
-    "seed": "node -e \"require('./data').seedDatabase()\""
+    "seed": "node -e \"require('./data').seedDatabase()\"",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
@@ -37,5 +40,8 @@
     "fhirpath": "^3.17.0",
     "jsonwebtoken": "^9.0.3",
     "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
   }
 }

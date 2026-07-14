@@ -3,6 +3,7 @@ const store = require('./store');
 const { parseQuery: llmParseQuery, LLM_CONFIG } = require('./llm-adapter');
 const { INTENTS, findIntent, generateCitation, generateLLMPrompt } = require('./intents');
 const { searchResearch } = require('./research');
+const { sanitizeUserInput } = require('./sanitize');
 
 function validatePermissions(userId, patientId, resourceTypes) {
   const user = getUserById(userId);
@@ -75,6 +76,7 @@ function chartSummary(patientId, patientName) {
 
 async function processQuery(question, patientId, userId, patientName, sourceIp) {
   const startTime = Date.now();
+  question = sanitizeUserInput(question);
   const user = getUserById(userId);
   const userRole = user ? user.role : 'unknown';
   const userName = user ? user.name : 'Unknown User';

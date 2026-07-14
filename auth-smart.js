@@ -2,7 +2,11 @@ const jwt = require('jsonwebtoken');
 const { v4: uuid } = require('uuid');
 const { getDb } = require('./store');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'openchart-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
 const JWT_EXPIRY = '1h';
 
 const AUTH_CODES = new Map();

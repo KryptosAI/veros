@@ -103,6 +103,16 @@ function logQuery({
   const hash = computeHash(prev, dataWithoutHash);
   const entry = { ...dataWithoutHash, hash };
 
+  // Rotate audit log when it exceeds 10MB
+  if (fs.existsSync(LOG_PATH)) {
+    const stat = fs.statSync(LOG_PATH);
+    if (stat.size > 10 * 1024 * 1024) {
+      const isoDate = new Date().toISOString().replace(/[:.]/g, '-');
+      const rotatedPath = path.join(__dirname, `audit-${isoDate}.jsonl`);
+      fs.renameSync(LOG_PATH, rotatedPath);
+    }
+  }
+
   fs.appendFileSync(LOG_PATH, JSON.stringify(entry) + '\n');
 
   const d = getDb();

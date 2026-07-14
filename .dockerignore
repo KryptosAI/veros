@@ -1,0 +1,15 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+audit.jsonl
+audit-*.jsonl
+.env
+.env.*
+.git
+.gitignore
+server.log
+outreach/
+scripts/
+Dockerfile
+docker-compose.yml

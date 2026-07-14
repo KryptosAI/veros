@@ -50,7 +50,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || req.headers.origin || 'http://localhost:3100');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -334,7 +334,7 @@ app.post('/api/verify/bulk', authMiddleware, async (req, res) => {
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
   const startTime = Date.now();
-  const result = verifyClaims(claims, patientId);
+  const result = await verifyClaims(claims, patientId);
   const responseTimeMs = Date.now() - startTime;
 
   logQuery({
@@ -420,18 +420,18 @@ app.get('/api/users', (_req, res) => {
 });
 
 // ─── Audit ───────────────────────────────────────────────
-app.get('/api/audit', (req, res) => {
-  if (req.query.key !== 'veros-demo') return res.status(401).json({ error: 'Access restricted. Add ?key=veros-demo for demo access.' });
+app.get('/api/audit', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required for audit access' });
   res.json(getRecentEntries(100));
 });
 
-app.get('/api/audit/verify', (req, res) => {
-  if (req.query.key !== 'veros-demo') return res.status(401).json({ error: 'Access restricted. Add ?key=veros-demo for demo access.' });
+app.get('/api/audit/verify', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required for audit access' });
   res.json(verifyChain());
 });
 
-app.get('/api/audit/patient/:id', (req, res) => {
-  if (req.query.key !== 'veros-demo') return res.status(401).json({ error: 'Access restricted.' });
+app.get('/api/audit/patient/:id', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required for audit access' });
   const { getEntriesByPatient } = require('./audit');
   res.json(getEntriesByPatient(req.params.id));
 });
@@ -515,40 +515,40 @@ app.post('/api/fhir/import', authMiddleware, (req, res) => {
 });
 
 // ─── FHIR Endpoints ──────────────────────────────────────
-app.get('/fhir/Patient/:id', (req, res) => {
+app.get('/fhir/Patient/:id', authMiddleware, (req, res) => {
   const r = store.getResource('Patient', req.params.id);
   if (!r) return res.status(404).json({ resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'not-found' }] });
   res.json(r);
 });
 
-app.get('/fhir/AllergyIntolerance', (req, res) => {
+app.get('/fhir/AllergyIntolerance', authMiddleware, (req, res) => {
   const pid = req.query.patient?.split('/').pop();
   if (!pid) return res.json({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] });
   const items = store.searchByPatient('AllergyIntolerance', pid);
   res.json({ resourceType: 'Bundle', type: 'searchset', total: items.length, entry: items.map(r => ({ fullUrl: `/fhir/AllergyIntolerance/${r.id}`, resource: r })) });
 });
 
-app.get('/fhir/AllergyIntolerance/:id', (req, res) => {
+app.get('/fhir/AllergyIntolerance/:id', authMiddleware, (req, res) => {
   const r = store.getResource('AllergyIntolerance', req.params.id);
   if (!r) return res.status(404).json({ resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'not-found' }] });
   res.json(r);
 });
 
-app.get('/fhir/MedicationRequest', (req, res) => {
+app.get('/fhir/MedicationRequest', authMiddleware, (req, res) => {
   const pid = req.query.patient?.split('/').pop();
   if (!pid) return res.json({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] });
   const items = store.searchByPatient('MedicationRequest', pid);
   res.json({ resourceType: 'Bundle', type: 'searchset', total: items.length, entry: items.map(r => ({ fullUrl: `/fhir/MedicationRequest/${r.id}`, resource: r })) });
 });
 
-app.get('/fhir/Condition', (req, res) => {
+app.get('/fhir/Condition', authMiddleware, (req, res) => {
   const pid = req.query.patient?.split('/').pop();
   if (!pid) return res.json({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] });
   const items = store.searchConditions(pid);
   res.json({ resourceType: 'Bundle', type: 'searchset', total: items.length, entry: items.map(r => ({ fullUrl: `/fhir/Condition/${r.id}`, resource: r })) });
 });
 
-app.get('/fhir/Observation', (req, res) => {
+app.get('/fhir/Observation', authMiddleware, (req, res) => {
   const pid = req.query.patient?.split('/').pop();
   if (!pid) return res.json({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] });
   const items = store.searchObservations(pid);
@@ -615,7 +615,7 @@ app.listen(PORT, () => {
       : 'LLM: disabled (set DEEPSEEK_API_KEY)';
 
   const msg = [
-    `\nVeros v0.3 — Clinical Ground Truth for AI`,
+    `\nVeros v1.3.3 — Clinical Ground Truth for AI`,
     `  Patients: ${store.patientCount()} | Total FHIR resources: ${Object.values(counts).reduce((a, b) => a + b, 0)}`,
     `  ${llmNote}`,
     `  Query:   POST /api/query        — Ask questions, get cited answers`,
@@ -628,5 +628,26 @@ app.listen(PORT, () => {
   console.log(msg);
   fs.appendFileSync(path.join(__dirname, 'server.log'), `${new Date().toISOString()} START\n${msg}\n`);
 });
+
+// ─── Graceful shutdown ──────────────────────────────
+let shuttingDown = false;
+
+function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} received. Shutting down...`);
+  try {
+    const d = store.getDb();
+    if (d && d.open) d.pragma('wal_checkpoint(TRUNCATE)');
+    if (d && d.open) d.close();
+    console.log('Database closed safely.');
+  } catch (e) { console.error('DB close error:', e.message); }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+const server = app;
 
 module.exports = app;
